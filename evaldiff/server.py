@@ -66,14 +66,19 @@ def columns(payload):
 def compare(payload):
     """Run one comparison from {'a': {'name', 'text'}, 'b': {...}, 'settings': {...}, 'mapping': {...}}."""
     mapping = payload.get("mapping") or {}
+    sides, missing = [], []
     try:
         st = _settings(payload.get("settings"))
-        sides = [parse.parse_side(*_side(payload, k), k.upper(), (mapping.get(k) or {}).get("id"),
-                                  (mapping.get(k) or {}).get("score")) for k in ("a", "b")]
-    except parse.ColumnError as e:
-        return {"error": str(e), "columns": columns(payload)}
+        for k in ("a", "b"):
+            try:
+                sides.append(parse.parse_side(*_side(payload, k), k.upper(), (mapping.get(k) or {}).get("id"),
+                                              (mapping.get(k) or {}).get("score")))
+            except parse.ColumnError as e:  # keep going so the other side's problem is reported too
+                missing.append(str(e))
     except parse.InputError as e:
         return {"error": str(e)}
+    if missing:  # no error: the page offers column mapping instead (spec 2.2)
+        return {"columns": columns(payload), "missing_columns": missing}
     ids, a, b, warnings = parse.pair(*sides)
     if not ids:
         return {"error": "No example ids match between A and B.", "warnings": warnings}

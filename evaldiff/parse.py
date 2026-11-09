@@ -93,9 +93,11 @@ def columns(text, name, label):
     """Return {'columns': [...], 'id': auto id key or None, 'score': auto score key or None}."""
     text = _prepare(text, label)
     try:
-        _, keys = _records(text, name)
+        recs, keys = _records(text, name)
     except InputError as e:
         raise InputError("%s: %s" % (label, e))
+    if not recs:
+        raise InputError("%s: file contains no rows." % label)
     return {"columns": keys, "id": _pick(keys, ID_KEYS), "score": _pick(keys, SCORE_KEYS)}
 
 

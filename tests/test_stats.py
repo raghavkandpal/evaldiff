@@ -179,13 +179,15 @@ class EdgeCases(unittest.TestCase):
 
     def test_bad_files(self):
         ok = "id,score\nz1,1"
-        self.assertEqual(paste("name,score\nz1,1", ok)["error"],
-                         "A: no id column found (expected one of: id, example_id, sample_id)")
+        # Sprint 2: a missing id or score column offers mapping instead of an error (amended criterion 16)
+        r = paste("name,score\nz1,1", ok)
+        self.assertNotIn("error", r)
+        self.assertEqual(r["missing_columns"], ["A: no id column found (expected one of: id, example_id, sample_id)"])
         self.assertEqual(paste('{"id":"z1","score":1}\n{bad json', ok)["error"], "A: line 2 is not valid JSON")
         self.assertEqual(paste('{"id":"z1","score":1}\n[1]', ok)["error"], "A: line 2 is not a JSON object")
         self.assertEqual(paste("", ok)["error"], "A: file contains no rows.")
-        self.assertEqual(paste(ok, "id,name\nz1,x")["error"],
-                         "B: no score column found (expected one of: score, passed, pass, correct, value, result)")
+        self.assertEqual(paste(ok, "id,name\nz1,x")["missing_columns"],
+                         ["B: no score column found (expected one of: score, passed, pass, correct, value, result)"])
 
     def test_utf8_bom(self):
         csv_side = parse.parse_side("\ufeffid,score\nq1,1\nq2,0\n", "pasted.csv", "A")
@@ -359,15 +361,19 @@ class Sprint2Tests(unittest.TestCase):
     def test_column_mapping(self):
         a, b = "qid,judge_score\na,1\nb,0\nc,1", "qid,judge_score\na,1\nb,1\nc,1"
         r = paste(a, b)
-        self.assertEqual(r["columns"]["a"], {"columns": ["qid", "judge_score"], "id": None, "score": None})
+        self.assertNotIn("error", r)  # evaluator bug 1: mapping for both sides, no error
+        for k in "ab":
+            self.assertEqual(r["columns"][k], {"columns": ["qid", "judge_score"], "id": None, "score": None})
+        self.assertEqual(r["missing_columns"], ["%s: no id column found (expected one of: id, example_id, sample_id)" % k
+                                                for k in "AB"])
         m = {k: {"id": "qid", "score": "judge_score"} for k in "ab"}
         r = paste(a, b, mapping=m)
         self.assertEqual(r["n"], 3)
         self.assertAlmostEqual(r["diff"], 1 / 3)
-        # Sprint 1 error text stays alongside the mapping offer
         r = paste("name,score\nz1,1", "id,score\nz1,1")
-        self.assertEqual(r["error"], "A: no id column found (expected one of: id, example_id, sample_id)")
         self.assertEqual(r["columns"]["b"]["id"], "id")
+        # other input errors are still errors, even when the other side also lacks a column
+        self.assertEqual(paste("name,score\nz1,1", "")["error"], "B: file contains no rows.")
 
     def test_mapping_alt_score(self):
         m = {k: {"id": "id", "score": "alt_score"} for k in "ab"}
@@ -398,6 +404,10 @@ class Sprint2Tests(unittest.TestCase):
                      "b": {"name": None, "text": "{bad"}})
         self.assertEqual(c["a"], {"columns": ["id", "score", "alt_score", "cluster"], "id": "id", "score": "score"})
         self.assertEqual(c["b"]["error"], "B: line 1 is not valid JSON")
+        # evaluator bug 2: per-side errors that the Map columns button must show
+        c = columns({"a": {"name": None, "text": ""}, "b": {"name": None, "text": '{"id":1,"score":1}\n{bad'}})
+        self.assertEqual((c["a"]["columns"], c["a"]["error"]), ([], "A: file contains no rows."))
+        self.assertEqual(c["b"]["error"], "B: line 2 is not valid JSON")
 
 
 if __name__ == "__main__":

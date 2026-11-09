@@ -39,12 +39,16 @@ function readSettings() {
   else if (!Number.isSafeInteger(seed)) msg = "Seed must be an integer";
   else if (!Number.isFinite(threshold)) msg = "Threshold must be a number";
   $("settings-error").textContent = msg;
-  if (msg) return null;
+  if (msg) {  // results on screen no longer match the settings on screen
+    $("results").hidden = true; $("verdict").textContent = "";
+    return null;
+  }
   return { alpha: Number($("alpha").value), seed, n_boot: nBoot, threshold,
            primary: $("primary-test").value, wilcoxon_zero: $("wilcoxon-zero").value };
 }
 
-function fillMapping(cols) {
+function fillMapping(cols, missing) {
+  $("mapping-missing").replaceChildren(...(missing || []).map((m) => { const li = document.createElement("li"); li.textContent = m; return li; }));
   for (const k of ["a", "b"]) {
     const c = cols[k];
     for (const f of ["id", "score"]) {
@@ -83,7 +87,7 @@ function renderTests(r) {
 }
 
 // Flip explorer state; reset on every new result.
-const ex = { rows: [], byId: new Map(), filter: "all", sort: null, cell: String, mapping: null };
+const ex = { rows: [], byId: new Map(), filter: "all", sort: null, cell: String };
 
 function renderRows() {
   const q = $("search-id").value.trim().toLowerCase();
@@ -95,8 +99,7 @@ function renderRows() {
   $("sort-delta").parentElement.setAttribute("aria-sort", ex.sort ? (ex.sort === "asc" ? "ascending" : "descending") : "none");
 }
 
-const rawText = (rec, idKey) => Object.entries(rec).filter(([k]) => k !== idKey)
-  .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(", ");
+const rawText = (rec) => Object.entries(rec).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(", ");
 
 function showDetail(id) {
   const r = ex.byId.get(id);
@@ -112,20 +115,22 @@ function showDetail(id) {
     div.className = "detail-side"; div.id = "row-detail-" + k;
     const b = document.createElement("b"); b.textContent = label;
     const ul = document.createElement("ul");
-    ul.replaceChildren(...r["raw_" + k].map((rec) => { const li = document.createElement("li"); li.textContent = rawText(rec, ex.mapping[k].id); return li; }));
+    ul.replaceChildren(...r["raw_" + k].map((rec) => { const li = document.createElement("li"); li.textContent = rawText(rec); return li; }));
     div.append(b, ul);
     parts.push(div);
   }
   parts.push(close);
   box.replaceChildren(...parts);
   box.hidden = false;
+  box.focus();  // detail sits below the table; on BIG it would be 2000 rows out of view
+  box.scrollIntoView({ block: "nearest" });
 }
 
 function render(r) {
   showWarnings(r.warnings);
   $("error").textContent = r.error || "";
-  if (r.columns) fillMapping(r.columns);
-  if (r.error) { $("results").hidden = true; $("verdict").textContent = ""; return; }
+  if (r.columns) fillMapping(r.columns, r.missing_columns);
+  if (r.error || r.columns) { $("results").hidden = true; $("verdict").textContent = ""; return; }
   $("results").hidden = false;
   $("verdict").textContent = r.verdict;
   $("note").textContent = r.note;
@@ -150,9 +155,10 @@ function render(r) {
   setRows("changes-table", r.changes, (x) => [x.id, f4(x.a), f4(x.b), sgn(x.d)]);
   const unchanged = fl.both_pass + fl.both_fail;
   $("summary").textContent = `${fl.improved.length} improved, ${fl.regressed.length} regressed, ${unchanged} unchanged. ` +
-    `If A and B were equally good, a difference at least this large would occur with probability ${fp(r.p_value)}.`;
+    (r.p_value === null ? `The ${r.test} p-value is undefined for this data, so there is no evidence either way.`
+      : `If A and B were equally good, a difference at least this large would occur with probability ${fp(r.p_value)}.`);
   renderTests(r);
-  Object.assign(ex, { rows: r.rows, byId: new Map(r.rows.map((x) => [x.id, x])), filter: "all", sort: null, cell, mapping: r.mapping });
+  Object.assign(ex, { rows: r.rows, byId: new Map(r.rows.map((x) => [x.id, x])), filter: "all", sort: null, cell });
   $("search-id").value = "";
   $("row-detail").hidden = true;
   renderRows();
@@ -179,7 +185,9 @@ async function mapColumns() {
     const body = JSON.stringify({ a: await readSide("a"), b: await readSide("b") });
     const res = await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body });
     const cols = await res.json();
-    if (cols.error) throw new Error(cols.error);
+    const errs = ["a", "b"].map((k) => cols[k] && cols[k].error).filter(Boolean);
+    $("error").textContent = errs.join(" ");
+    if (errs.length) return;
     fillMapping(cols);
   } catch (e) {
     $("error").textContent = e.message;

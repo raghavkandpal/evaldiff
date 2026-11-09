@@ -417,7 +417,7 @@ Each sprint is built, committed, and graded on its own through the browser. Crit
 14. n = 1: A = `id,score` / `s1,1`, B = `id,score` / `s1,0`. This shows n `1`, diff `-1.0000`, `#p-value` = `n/a` and verdict `Insufficient data (n < 2)`.
 15. All ties: uploading `f1_a.csv` as both A and B shows diff `0.0000`, `#ci-low` = `0.0000`, `#ci-high` = `0.0000`, p `1.0000`, verdict `No significant difference`, and `#note` containing `All paired differences are zero.`
 16. Bad input files:
-    - A = `name,score` / `z1,1` shows `#error` = `A: no id column found (expected one of: id, example_id, sample_id)`.
+    - A = `name,score` / `z1,1` shows `#error` = `A: no id column found (expected one of: id, example_id, sample_id)`. (Sprint 1 only. From Sprint 2 on, per §2.2, a missing id or score column shows the column-mapping control instead, `#error` stays empty, and this bullet is graded by Sprint 2 criterion 9.)
     - A = `{"id":"z1","score":1}` followed by a second line `{bad json` shows `A: line 2 is not valid JSON`.
     - An empty A shows `A: file contains no rows.`
 17. Example `big` gives n `2000`, diff `+0.1000`, p `<0.0001` and verdict `B is better (significant)`. Results appear within 10 seconds of clicking Compare.
