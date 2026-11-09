@@ -100,6 +100,51 @@
     <table id="rows-table"><thead><tr><th>id</th><th>A</th><th>B</th>
       <th aria-sort="none"><button type="button" id="sort-delta" class="th-btn">Δ</button></th><th>Status</th></tr></thead><tbody></tbody></table>
     <div id="row-detail" tabindex="-1" hidden></div>
+    <section id="power" class="power" aria-labelledby="power-h">
+      <h3 id="power-h">Power and minimum detectable effect</h3>
+      <div class="power-inputs">
+        <label>Target power <input type="number" id="target-power" value="0.80" min="0.01" max="0.99" step="0.01"></label>
+        <label>Target effect <input type="number" id="target-effect" value="0.05" min="0.001" max="1" step="0.01"></label>
+        <span class="hint">alpha comes from the settings</span>
+      </div>
+      <div id="power-variation" hidden>
+        <p id="power-variation-msg">No variation between A and B; enter an assumed discordance rate or SD</p>
+        <label id="assumed-pd-label">Assumed discordance rate <input type="number" id="assumed-pd" min="0" max="1" step="0.01"></label>
+        <label id="assumed-sd-label">Assumed SD of differences <input type="number" id="assumed-sd" min="0" step="0.01"></label>
+      </div>
+      <div id="power-error" class="field-error" role="alert"></div>
+      <dl class="stats">
+        <div><dt>Method</dt><dd id="power-method"></dd></div>
+        <div id="pd-box"><dt>Discordant share p<sub>d</sub></dt><dd id="pd"></dd></div>
+        <div id="var-d-box"><dt>Var(d)</dt><dd id="var-d"></dd></div>
+        <div><dt>Minimum detectable effect at this n</dt><dd id="mde"></dd></div>
+        <div><dt>n required for the target effect</dt><dd id="n-required"></dd></div>
+      </dl>
+      <p id="n-required-note" class="hint"></p>
+      <p id="power-note" hidden></p>
+      <div class="power-detail">
+        <table id="mde-table"><thead><tr><th>n</th><th>MDE</th><th></th></tr></thead><tbody></tbody></table>
+        <svg id="mde-chart" viewBox="0 0 480 240" role="img" aria-labelledby="mde-chart-title">
+          <title id="mde-chart-title">Minimum detectable effect against n</title></svg>
+      </div>
+    </section>
+  </section>
+  <section id="plan-tab" class="planner" aria-labelledby="plan-h">
+    <h2 id="plan-h">Sample-size planner</h2>
+    <p class="hint">Needs no data. Uses alpha from the settings and the target power from the power panel (default 0.80).</p>
+    <div class="power-inputs">
+      <label>Design <select id="plan-design"><option value="binary">binary</option><option value="continuous">continuous</option></select></label>
+      <label id="plan-pd-label">Discordance rate p<sub>d</sub> <input type="number" id="plan-pd" value="0.2" min="0" max="1" step="0.01"></label>
+      <label id="plan-sd-label" hidden>SD of differences <input type="number" id="plan-sd" value="0.3" min="0" step="0.01"></label>
+      <label>Target effect <input type="number" id="plan-effect" value="0.05" min="0.001" max="1" step="0.01"></label>
+      <label>At n <input type="number" id="plan-n-input" value="100" min="1" step="1"></label>
+    </div>
+    <div id="plan-error" class="field-error" role="alert"></div>
+    <dl class="stats">
+      <div><dt>n required</dt><dd id="plan-n"></dd></div>
+      <div><dt>Minimum detectable effect at that n</dt><dd id="plan-mde-at-n"></dd></div>
+    </dl>
+    <p id="plan-note" class="hint"></p>
   </section>
 </main>
 <script src="/static/app.js"></script>

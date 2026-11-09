@@ -7,6 +7,9 @@ ALPHA = 0.05
 THRESHOLD = 0.5
 N_BOOT = 10000
 R_PERM = 10000
+MDE_NS = (50, 100, 200, 500, 1000, 2000)
+CONNOR = "Connor (paired binary)"
+MILLER = "Paired normal approximation (Miller 2024)"
 TESTS = ("mcnemar_exact", "mcnemar_midp", "signflip", "wilcoxon", "ztest")
 
 
@@ -121,6 +124,63 @@ def ztest(d, alpha=ALPHA):
     return m / se, 2 * statistics.NormalDist().cdf(-abs(m / se)), (m - q * se, m + q * se)
 
 
+def _z(alpha, power):
+    nd = statistics.NormalDist()
+    return nd.inv_cdf(1 - alpha / 2), nd.inv_cdf(power)
+
+
+def connor_n(pd, delta, alpha=ALPHA, power=0.8):
+    """Connor (1987) paired-binary sample size (unrounded); None when delta^2 > pd has no solution."""
+    if delta * delta > pd * (1 + 1e-12):  # tolerance: sqrt(pd) ** 2 can land just above pd
+        return None
+    za, zb = _z(alpha, power)
+    return (za * math.sqrt(pd) + zb * math.sqrt(max(0.0, pd - delta * delta))) ** 2 / (delta * delta)
+
+
+def connor_mde(pd, n, alpha=ALPHA, power=0.8):
+    """Smallest delta Connor's equation detects at n, by bisection on (0, sqrt(pd)]; connor_n falls as delta grows.
+    None when even delta = sqrt(pd) needs more than n examples."""
+    lo, hi = 0.0, math.sqrt(pd)
+    if connor_n(pd, hi, alpha, power) > n:
+        return None
+    for _ in range(100):
+        mid = (lo + hi) / 2
+        if connor_n(pd, mid, alpha, power) > n:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
+def normal_n(var, delta, alpha=ALPHA, power=0.8):
+    """Miller (2024) Eq. 9 with omega^2 = Var(d): unrounded n."""
+    za, zb = _z(alpha, power)
+    return (za + zb) ** 2 * var / (delta * delta)
+
+
+def normal_mde(var, n, alpha=ALPHA, power=0.8):
+    """Miller (2024) Eq. 10: minimum detectable effect at n."""
+    za, zb = _z(alpha, power)
+    return (za + zb) * math.sqrt(var / n)
+
+
+def power_plan(design, value, alpha=ALPHA, power=0.8, effect=0.05, n=None):
+    """Power panel numbers. value is p_d (binary) or Var(d) (continuous). With n, adds the MDE and the MDE table."""
+    binary = design == "binary"
+    out = {"method": CONNOR if binary else MILLER, "mde": None, "n_required": None, "table": []}
+    if not value > 0:
+        return out
+    req = connor_n(value, effect, alpha, power) if binary else normal_n(value, effect, alpha, power)
+    out["n_required"] = None if req is None else math.ceil(round(req, 9))  # round: 626.0000000001 is 626
+    if req is None:
+        out["n_required_note"] = "The target effect is too large for this discordance rate (Connor needs effect² ≤ p_d)."
+    if n:
+        mde = (lambda m: connor_mde(value, m, alpha, power)) if binary else (lambda m: normal_mde(value, m, alpha, power))
+        out["mde"] = mde(n)
+        out["table"] = [{"n": m, "mde": mde(m), "current": m == n} for m in sorted(set(MDE_NS) | {n})]
+    return out
+
+
 def verdict(n, p, diff, alpha=ALPHA):
     if n < 2:
         return "Insufficient data (n < 2)"
@@ -194,6 +254,9 @@ def analyze(ids, a, b, alpha=ALPHA, threshold=THRESHOLD, seed=0, n_boot=N_BOOT, 
         "primary": primary,
         "p_value": p,
         "verdict": verdict(n, p, diff, alpha),
+        "alpha": alpha,
+        "pd": (nb + nc) / n,  # discordant share, used by the Connor power method
+        "var_d": statistics.variance(d) if n >= 2 else None,
         "seed": seed,
         "tests": tests,
         "flips": flips,

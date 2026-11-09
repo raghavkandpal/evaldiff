@@ -144,7 +144,121 @@ function showDetail(id) {
   box.scrollIntoView({ block: "nearest" });
 }
 
+async function postJSON(url, obj) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+  return res.json();
+}
+
+const POWER_NOTE = "The observed difference is smaller than the minimum detectable effect at this n; " +
+  "a non-significant result here is not evidence of no effect.";
+let last = null, powerSeq = 0, planSeq = 0;  // seq: drop answers to requests that a newer input superseded
+
+const SVG = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, text) {
+  const e = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// Inline SVG line chart of MDE against n (log x axis), with a labelled marker at the current n.
+function renderChart(table) {
+  const svg = $("mde-chart"), title = $("mde-chart-title");
+  const pts = table.filter((t) => t.mde !== null);
+  svg.replaceChildren(title);
+  if (pts.length < 2) return;
+  const W = 480, H = 240, L = 56, R = 16, T = 16, B = 40;
+  const lx = pts.map((t) => Math.log(t.n)), x0 = Math.min(...lx), x1 = Math.max(...lx);
+  const yMax = Math.max(...pts.map((t) => t.mde)) * 1.1;
+  const X = (n) => L + (Math.log(n) - x0) / (x1 - x0) * (W - L - R), Y = (m) => T + (1 - m / yMax) * (H - T - B);
+  svg.append(svgEl("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, class: "axis" }),
+             svgEl("line", { x1: L, y1: T, x2: L, y2: H - B, class: "axis" }));
+  for (const v of [0, yMax / 2, yMax]) {
+    svg.append(svgEl("text", { x: L - 6, y: Y(v) + 4, "text-anchor": "end", class: "tick" }, v.toFixed(3)));
+  }
+  for (const t of pts) if (!t.current || [50, 100, 200, 500, 1000, 2000].includes(t.n)) {
+    svg.append(svgEl("text", { x: X(t.n), y: H - B + 16, "text-anchor": "middle", class: "tick" }, String(t.n)));
+  }
+  svg.append(svgEl("text", { x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle", class: "axis-label" }, "n (log scale)"),
+             svgEl("text", { x: 12, y: (T + H - B) / 2, "text-anchor": "middle", class: "axis-label",
+                             transform: `rotate(-90 12 ${(T + H - B) / 2})` }, "MDE"));
+  svg.append(svgEl("polyline", { points: pts.map((t) => `${X(t.n)},${Y(t.mde)}`).join(" "), class: "line" }));
+  for (const t of pts) {
+    const c = svgEl("circle", { cx: X(t.n), cy: Y(t.mde), r: t.current ? 6 : 3.5, class: t.current ? "point current-marker" : "point" });
+    c.append(svgEl("title", {}, `n = ${t.n}, MDE ${f4(t.mde)}`));
+    svg.append(c);
+    if (t.current) {
+      const right = X(t.n) < W / 2;
+      svg.append(svgEl("text", { x: X(t.n) + (right ? 10 : -10), y: Y(t.mde) - 8, "text-anchor": right ? "start" : "end",
+                                 class: "current-label" }, `current (n = ${t.n})`));
+    }
+  }
+}
+
+function clearPower() {
+  for (const id of ["mde", "n-required"]) $(id).textContent = "n/a";
+  $("n-required-note").textContent = "";
+  $("power-note").hidden = true; $("power-note").textContent = "";
+  $("mde-table").querySelector("tbody").replaceChildren();
+  renderChart([]);
+}
+
+async function updatePower() {
+  const r = last;
+  if (!r || r.n < 2) { $("power").hidden = true; return; }
+  $("power").hidden = false;
+  const binary = r.score_type === "binary", observed = binary ? r.pd : r.var_d;
+  const noVar = !(observed > 1e-15);  // all-equal differences can leave float dust in Var(d)
+  $("power-variation").hidden = !noVar;
+  $("assumed-pd-label").hidden = !binary; $("assumed-sd-label").hidden = binary;
+  $("pd-box").hidden = !binary; $("var-d-box").hidden = binary;
+  $("pd").textContent = binary ? f4(r.pd) : "";
+  $("var-d").textContent = binary ? "" : r.var_d.toFixed(6);
+  $("power-method").textContent = binary ? "Connor (paired binary)" : "Paired normal approximation (Miller 2024)";
+  let value = noVar ? 0 : observed;
+  const assumedId = binary ? "assumed-pd" : "assumed-sd";
+  if (noVar && $(assumedId).value.trim() !== "") { const a = num(assumedId); value = binary ? a : a * a; }
+  const seq = ++powerSeq;
+  const p = await postJSON("/api/power", { design: r.score_type, value, alpha: r.alpha, power: num("target-power"),
+                                          effect: num("target-effect"), n: r.n });
+  if (seq !== powerSeq) return;
+  $("power-error").textContent = p.error || "";
+  if (p.error) { clearPower(); return; }
+  $("power-method").textContent = p.method;
+  $("mde").textContent = p.mde === null ? "n/a" : f4(p.mde);
+  $("n-required").textContent = p.n_required === null ? "n/a" : String(p.n_required);
+  $("n-required-note").textContent = p.n_required_note || "";
+  const notSig = r.p_value === null || r.p_value >= r.alpha;
+  const show = notSig && p.mde !== null && Math.abs(r.diff) < p.mde;
+  $("power-note").hidden = !show; $("power-note").textContent = show ? POWER_NOTE : "";
+  $("mde-table").querySelector("tbody").replaceChildren(...p.table.map((t) => {
+    const tr = document.createElement("tr");
+    tr.dataset.n = t.n;
+    if (t.current) tr.className = "current";
+    for (const v of [String(t.n), t.mde === null ? "n/a" : f4(t.mde), t.current ? "current" : ""]) {
+      const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+    }
+    return tr;
+  }));
+  renderChart(p.table);
+}
+
+async function updatePlan() {
+  const binary = $("plan-design").value === "binary";
+  $("plan-pd-label").hidden = !binary; $("plan-sd-label").hidden = binary;
+  const sd = num("plan-sd"), nAt = num("plan-n-input");
+  const seq = ++planSeq;
+  const p = await postJSON("/api/power", { design: binary ? "binary" : "continuous", value: binary ? num("plan-pd") : sd * sd,
+    alpha: Number($("alpha").value), power: num("target-power"), effect: num("plan-effect"), n: nAt });
+  if (seq !== planSeq) return;
+  $("plan-error").textContent = p.error || "";
+  $("plan-n").textContent = p.error || p.n_required === null ? "n/a" : String(p.n_required);
+  $("plan-mde-at-n").textContent = p.error || p.mde === null ? "n/a" : f4(p.mde);
+  $("plan-note").textContent = p.error ? "" : p.n_required_note || "";
+}
+
 function render(r) {
+  last = r.error || r.columns ? null : r;
   showWarnings(r.warnings);
   $("error").textContent = r.error || "";
   if (r.columns) fillMapping(r.columns, r.missing_columns);
@@ -189,9 +303,8 @@ async function compare() {
   const btn = $("compare-btn");
   btn.disabled = true;
   try {
-    const body = JSON.stringify({ a: await readSide("a"), b: await readSide("b"), settings, mapping: readMapping() });
-    const res = await fetch("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body });
-    render(await res.json());
+    render(await postJSON("/api/compare", { a: await readSide("a"), b: await readSide("b"), settings, mapping: readMapping() }));
+    await updatePower();
   } catch (e) {
     render({ error: e.message, warnings: [] });
   } finally {
@@ -201,9 +314,7 @@ async function compare() {
 
 async function mapColumns() {
   try {
-    const body = JSON.stringify({ a: await readSide("a"), b: await readSide("b") });
-    const res = await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body });
-    const cols = await res.json();
+    const cols = await postJSON("/api/columns", { a: await readSide("a"), b: await readSide("b") });
     const errs = ["a", "b"].map((k) => cols[k] && cols[k].error).filter(Boolean);
     $("error").textContent = errs.join(" ");
     if (errs.length) return;
@@ -251,6 +362,9 @@ $("search-id").addEventListener("input", renderRows);
 $("sort-delta").addEventListener("click", () => { ex.sort = ex.sort === "asc" ? "desc" : "asc"; renderRows(); });
 const rowsBody = $("rows-table").querySelector("tbody");
 rowsBody.addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id); });
+for (const id of ["target-power", "target-effect", "assumed-pd", "assumed-sd"]) $(id).addEventListener("input", () => { updatePower(); updatePlan(); });
+for (const id of ["plan-design", "plan-pd", "plan-sd", "plan-effect", "plan-n-input", "alpha"]) for (const t of ["input", "change"]) $(id).addEventListener(t, updatePlan);
+updatePlan();
 for (const id of ["n-boot", "seed", "threshold"]) for (const t of ["input", "change"]) $(id).addEventListener(t, validateSettings);
 fetch("/api/examples").then((r) => r.json()).then((list) => {
   examples = list;

@@ -27,6 +27,10 @@ All paired tests run side by side: exact McNemar (and mid-p), sign-flip permutat
 pass threshold for continuous scores and which test drives the verdict. The flip explorer filters, searches and
 sorts every paired example; click a row to see its raw fields.
 
+The power panel shows the minimum detectable effect at your n and the n needed for a target effect
+(Connor for paired binary scores, Miller 2024's paired normal approximation for continuous ones). The
+sample-size planner below the results needs no data.
+
 ## Tests
 
 ```

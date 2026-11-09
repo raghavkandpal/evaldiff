@@ -49,3 +49,19 @@ button[aria-pressed=true] { background: var(--accent); color: var(--bg); border-
 #summary { margin: 4px 0 12px; }
 section#results { overflow-x: auto; }
 .row-btn { padding: 0; font: inherit; background: none; color: var(--accent); border: none; cursor: pointer; text-decoration: underline; }
+.power, .planner { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 8px; }
+.planner { max-width: 1000px; margin: 24px auto 0; }
+.power-inputs { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+.power-inputs input[type=number] { width: 7em; }
+#power-note { color: var(--warn); font-weight: 600; }
+.power-detail { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 700px) { .power-detail { grid-template-columns: 1fr; } }
+#mde-table tr.current td { font-weight: 700; }
+#mde-chart { width: 100%; max-width: 560px; height: auto; }
+#mde-chart .axis { stroke: var(--muted); stroke-width: 1; }
+#mde-chart .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+#mde-chart .point { fill: var(--accent); }
+#mde-chart .current-marker { fill: var(--bg); stroke: var(--fg); stroke-width: 2.5; }
+#mde-chart text { fill: var(--muted); font-size: 11px; }
+#mde-chart .current-label { fill: var(--fg); font-weight: 700; font-size: 12px; }
+#mde-chart .axis-label { fill: var(--fg); }

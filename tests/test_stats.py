@@ -1,4 +1,4 @@
-"""Asserts the spec section 3 numbers that Sprints 1 and 2 introduce."""
+"""Asserts the spec section 3 numbers that Sprints 1 to 3 introduce."""
 import itertools
 import os
 import unittest
@@ -416,6 +416,102 @@ class Sprint2Tests(unittest.TestCase):
         c = columns({"a": {"name": None, "text": ""}, "b": {"name": None, "text": '{"id":1,"score":1}\n{bad'}})
         self.assertEqual((c["a"]["columns"], c["a"]["error"]), ([], "A: file contains no rows."))
         self.assertEqual(c["b"]["error"], "B: line 2 is not valid JSON")
+
+
+
+class Sprint3Power(unittest.TestCase):
+    """Power and sample size (spec section 3 power numbers, Sprint 3 criteria)."""
+
+    def plan(self, r, **kw):
+        from evaldiff.server import power
+        binary = r["score_type"] == "binary"
+        args = dict(design=r["score_type"], value=r["pd"] if binary else r["var_d"], alpha=0.05, power=0.8,
+                    effect=0.05, n=r["n"])
+        args.update(kw)
+        return power(args)
+
+    def test_f1(self):
+        r = fixture("f1_a.csv", "f1_b.csv")
+        self.assertAlmostEqual(r["pd"], 0.3)
+        p = self.plan(r)
+        self.assertEqual(p["method"], "Connor (paired binary)")
+        self.assertTrue(abs(p["mde"] - 0.3233) <= 0.003, p["mde"])
+        self.assertLess(abs(r["diff"]), p["mde"])  # criterion 2: power note applies (not significant)
+        self.assertGreaterEqual(r["p_value"], r["alpha"])
+
+    def test_f2(self):
+        r = fixture("f2_a.jsonl", "f2_b.jsonl")
+        self.assertAlmostEqual(r["pd"], 1 / 3)
+        p = self.plan(r)
+        self.assertTrue(abs(p["mde"] - 0.2839) <= 0.003, p["mde"])
+        self.assertTrue(abs(p["n_required"] - 1045) <= 3, p["n_required"])
+        self.assertEqual(p["n_required"], 1045)
+        self.assertLess(r["p_value"], r["alpha"])  # criterion 3: significant, so no power note
+
+    def test_f3(self):
+        r = fixture("f3_a.jsonl", "f3_b.jsonl")
+        self.assertAlmostEqual(r["var_d"], 0.02125)
+        p = self.plan(r)
+        self.assertEqual(p["method"], "Paired normal approximation (Miller 2024)")
+        self.assertTrue(abs(p["mde"] - 0.1444) <= 0.001, p["mde"])
+        self.assertEqual(p["n_required"], 67)
+        self.assertEqual(self.plan(r, effect=0.10)["n_required"], 17)
+        self.assertEqual(self.plan(r, power=0.90)["n_required"], 90)  # criterion 9
+        t = p["table"]
+        self.assertEqual([x["n"] for x in t], [8, 50, 100, 200, 500, 1000, 2000])
+        self.assertEqual([x["n"] for x in t if x["current"]], [8])
+        self.assertAlmostEqual(t[0]["mde"], p["mde"])
+        self.assertTrue(all(a["mde"] > b["mde"] for a, b in zip(t, t[1:])))
+
+    def test_no_variation_and_assumed(self):
+        t = read("f1_a.csv")
+        r = paste(t, t)
+        self.assertEqual(r["pd"], 0)
+        p = self.plan(r)
+        self.assertIsNone(p["mde"])
+        self.assertIsNone(p["n_required"])
+        self.assertTrue(abs(self.plan(r, value=0.2)["n_required"] - 626) <= 3)  # criterion 7, assumed p_d 0.2
+
+    def test_planner(self):
+        from evaldiff.server import power
+        self.assertEqual(power(dict(design="binary", value=0.2, alpha=0.05, power=0.8, effect=0.05))["n_required"], 626)
+        self.assertEqual(power(dict(design="continuous", value=0.3 ** 2, alpha=0.05, power=0.8, effect=0.05))["n_required"],
+                         283)
+
+    def test_connor_formula_and_bisection(self):
+        """Independent re-derivation: Connor's n at the bisected MDE equals the current n."""
+        from statistics import NormalDist
+        za, zb = NormalDist().inv_cdf(0.975), NormalDist().inv_cdf(0.8)
+        for pd, n in ((0.3, 20), (1 / 3, 30), (0.05, 2000)):
+            delta = stats.connor_mde(pd, n)
+            self.assertAlmostEqual((za * pd ** 0.5 + zb * (pd - delta ** 2) ** 0.5) ** 2 / delta ** 2, n, places=6)
+        self.assertIsNone(stats.connor_mde(0.3, 3))  # even delta = sqrt(p_d) needs more than 3
+        self.assertIsNone(stats.connor_n(0.01, 0.5))
+        self.assertIn("n_required_note", stats.power_plan("binary", 0.01, effect=0.5, n=20))
+        self.assertAlmostEqual(stats.normal_mde(0.02125, 67) / 0.05, (66.71547774 / 67) ** 0.5, places=6)
+
+    def test_current_n_already_in_table(self):
+        t = stats.power_plan("binary", 0.2, n=2000)["table"]
+        self.assertEqual([x["n"] for x in t], [50, 100, 200, 500, 1000, 2000])
+        self.assertEqual([x["current"] for x in t], [False] * 5 + [True])
+
+    def test_power_validation(self):
+        from evaldiff.server import power
+        base = dict(design="binary", value=0.2, alpha=0.05, power=0.8, effect=0.05)
+        for bad, msg in (({"power": 1.0}, "Target power must be between 0 and 1"),
+                         ({"power": None}, "Target power must be between 0 and 1"),
+                         ({"effect": 0}, "Target effect must be between 0 and 1"),
+                         ({"value": 1.5}, "The discordance rate must be between 0 and 1"),
+                         ({"value": -1}, "The discordance rate or SD must be 0 or more"),
+                         ({"design": "x"}, "Design must be binary or continuous"),
+                         ({"n": 0}, "n must be a whole number of at least 1")):
+            self.assertEqual(power(dict(base, **bad))["error"], msg)
+
+    def test_no_observed_power(self):
+        root = os.path.dirname(FIX)
+        for f in ("index.html", "app.js"):
+            with open(os.path.join(root, "evaldiff", "static", f)) as fh:
+                self.assertNotIn("observed power", fh.read().lower())
 
 
 if __name__ == "__main__":

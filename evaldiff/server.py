@@ -48,6 +48,35 @@ def _settings(raw):
     return {"alpha": alpha, "seed": seed, "n_boot": n_boot, "threshold": threshold, "primary": primary, "zero": zero}
 
 
+def _num(raw, key, lo, hi, msg, lo_open=True, hi_open=True):
+    """A finite number from raw[key] inside (lo, hi) (bounds open unless told otherwise), else InputError(msg)."""
+    v = raw.get(key)
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        raise parse.InputError(msg)
+    if (v <= lo if lo_open else v < lo) or (v >= hi if hi_open else v > hi):
+        raise parse.InputError(msg)
+    return v
+
+
+def power(payload):
+    """Power panel and planner: {design, value (p_d or Var(d)), alpha, power, effect, n?}."""
+    try:
+        if payload.get("design") not in ("binary", "continuous"):
+            raise parse.InputError("Design must be binary or continuous")
+        alpha = _num(payload, "alpha", 0, 1, "alpha must be between 0 and 1")
+        pw = _num(payload, "power", 0, 1, "Target power must be between 0 and 1")
+        effect = _num(payload, "effect", 0, 1, "Target effect must be between 0 and 1")
+        value = _num(payload, "value", 0, math.inf, "The discordance rate or SD must be 0 or more", lo_open=False)
+        if payload["design"] == "binary" and value > 1:
+            raise parse.InputError("The discordance rate must be between 0 and 1")
+        n = payload.get("n")
+        if n is not None and (isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 10 ** 9):
+            raise parse.InputError("n must be a whole number of at least 1")
+    except parse.InputError as e:
+        return {"error": str(e)}
+    return stats.power_plan(payload["design"], value, alpha, pw, effect, n)
+
+
 def _side(payload, k):
     return payload[k].get("text") or "", payload[k].get("name")
 
@@ -123,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b"Not found", "text/plain")
 
     def do_POST(self):
-        if self.path not in ("/api/compare", "/api/columns"):
+        if self.path not in ("/api/compare", "/api/columns", "/api/power"):
             return self._send(404, b"Not found", "text/plain")
         length = int(self.headers.get("Content-Length") or 0)
         if length > 2 * parse.MAX_BYTES + 4096:
@@ -132,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
         except ValueError:
             return self._send(400, {"error": "Request is not valid JSON."})
+        if isinstance(payload, dict) and self.path == "/api/power":
+            return self._send(200, power(payload))
         if not isinstance(payload, dict) or not all(isinstance(payload.get(k), dict) for k in ("a", "b")):
             return self._send(400, {"error": "Request needs A and B."})
         self._send(200, (compare if self.path == "/api/compare" else columns)(payload))
