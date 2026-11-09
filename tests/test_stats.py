@@ -157,6 +157,13 @@ class EdgeCases(unittest.TestCase):
         self.assertEqual(paste(ok, "id,name\nz1,x")["error"],
                          "B: no score column found (expected one of: score, passed, pass, correct, value, result)")
 
+    def test_utf8_bom(self):
+        csv_side = parse.parse_side("\ufeffid,score\nq1,1\nq2,0\n", "pasted.csv", "A")
+        self.assertEqual(csv_side["scores"], {"q1": [1.0], "q2": [0.0]})
+        self.assertEqual(paste("\ufeffid,score\nq1,1\nq2,0\n", "id,score\nq1,1\nq2,1\n")["n"], 2)
+        jl = parse.parse_side('\ufeff{"id":"q1","score":1}\n{"id":"q2","score":0}\n', None, "A")
+        self.assertEqual(jl["scores"], {"q1": [1.0], "q2": [0.0]})
+
     def test_scores(self):
         for v, want in ((True, 1.0), (False, 0.0), (0.7, 0.7), (" Passed ", 1.0), ("no", 0.0), ("2.5", 2.5),
                         (None, None), ("", None), ("NaN", None), ("inf", None), ("-inf", None), ("abc", None),

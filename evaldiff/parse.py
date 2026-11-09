@@ -83,6 +83,8 @@ def parse_side(text, name, label):
     """Parse one file. Returns {'ids': [...], 'scores': {id: [floats]}, 'invalid': [line numbers]}."""
     if len(text.encode("utf-8")) > MAX_BYTES:
         raise InputError("%s: file is larger than 50 MB." % label)
+    if text.startswith("\ufeff"):  # UTF-8 BOM from pasted or Windows-saved files; would hide the first header
+        text = text[1:]
     try:
         recs, keys = _records(text, name)
     except InputError as e:
