@@ -31,14 +31,39 @@
     <label>Example <select id="example-select"></select></label>
     <button type="button" id="load-example">Load example</button>
     <button type="button" id="swap-btn">Swap A and B</button>
+    <button type="button" id="map-columns">Map columns</button>
     <button type="button" id="compare-btn" class="primary">Compare</button>
-    <span class="settings">alpha 0.05 · threshold 0.5 · seed <span id="seed">0</span></span>
+  </section>
+  <section class="settings" aria-label="Settings">
+    <label>alpha <select id="alpha"><option value="0.01">0.01</option><option value="0.05" selected>0.05</option><option value="0.10">0.10</option></select></label>
+    <label>Seed <input type="number" id="seed" value="0" step="1"></label>
+    <label>Bootstrap resamples <input type="number" id="n-boot" value="10000" min="1000" max="100000" step="1"></label>
+    <label>Threshold <input type="number" id="threshold" value="0.5" step="any"></label>
+    <label>Primary test <select id="primary-test">
+      <option value="auto">auto</option><option value="mcnemar_exact">mcnemar_exact</option>
+      <option value="mcnemar_midp">mcnemar_midp</option><option value="signflip">signflip</option>
+      <option value="wilcoxon">wilcoxon</option><option value="ztest">ztest</option></select></label>
+    <label>Wilcoxon zeros <select id="wilcoxon-zero"><option value="wilcox">wilcox</option><option value="pratt">pratt</option></select></label>
+    <div id="settings-error" class="field-error" role="alert"></div>
+  </section>
+  <section id="mapping" class="mapping" hidden>
+    <h3>Column mapping</h3>
+    <div class="map-grid">
+      <fieldset><legend>Baseline (A)</legend>
+        <label>id <select id="map-a-id"></select></label>
+        <label>score <select id="map-a-score"></select></label></fieldset>
+      <fieldset><legend>Candidate (B)</legend>
+        <label>id <select id="map-b-id"></select></label>
+        <label>score <select id="map-b-score"></select></label></fieldset>
+    </div>
+    <p class="hint">Choose the id and score columns, then click Compare.</p>
   </section>
   <div id="error" role="alert"></div>
   <ul id="warnings"></ul>
   <section id="results" hidden>
     <div id="verdict" class="verdict"></div>
     <div id="note"></div>
+    <p id="summary"></p>
     <dl class="stats">
       <div><dt>n paired</dt><dd id="n-paired"></dd></div>
       <div><dt>Score type</dt><dd id="score-type"></dd></div>
@@ -48,6 +73,8 @@
       <div><dt id="ci-label"></dt><dd><span id="ci-low"></span> to <span id="ci-high"></span></dd></div>
       <div><dt id="test-name"></dt><dd>p = <span id="p-value"></span></dd></div>
     </dl>
+    <h3>All paired tests</h3>
+    <table id="tests-table"><thead><tr><th>Test</th><th>Statistic</th><th>p</th><th>CI</th></tr></thead><tbody></tbody></table>
     <h3>Flips</h3>
     <p class="counts">Improved <b id="count-improved"></b> · Regressed <b id="count-regressed"></b> ·
       Both pass <b id="count-both-pass"></b> · Both fail <b id="count-both-fail"></b></p>
@@ -61,6 +88,17 @@
       <h4>Largest score changes (top 20 by |Δ|)</h4>
       <table id="changes-table"><thead><tr><th>id</th><th>A</th><th>B</th><th>Δ</th></tr></thead><tbody></tbody></table>
     </div>
+    <h3>Flip explorer</h3>
+    <div class="explorer-controls">
+      <button type="button" id="filter-all" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" id="filter-improved" data-filter="improved" aria-pressed="false">Improved</button>
+      <button type="button" id="filter-regressed" data-filter="regressed" aria-pressed="false">Regressed</button>
+      <button type="button" id="filter-unchanged" data-filter="unchanged" aria-pressed="false">Unchanged</button>
+      <label>Search id <input type="search" id="search-id"></label>
+    </div>
+    <table id="rows-table"><thead><tr><th>id</th><th>A</th><th>B</th>
+      <th aria-sort="none"><button type="button" id="sort-delta" class="th-btn">Δ</button></th><th>Status</th></tr></thead><tbody></tbody></table>
+    <div id="row-detail" hidden></div>
   </section>
 </main>
 <script src="/static/app.js"></script>

@@ -79,25 +79,43 @@ def _records(text, name):
     return out, header or []
 
 
-def parse_side(text, name, label):
-    """Parse one file. Returns {'ids': [...], 'scores': {id: [floats]}, 'invalid': [line numbers]}."""
+class ColumnError(InputError):
+    """The id or score column could not be found; the UI offers column mapping (Sprint 2)."""
+
+
+def _prepare(text, label):
     if len(text.encode("utf-8")) > MAX_BYTES:
         raise InputError("%s: file is larger than 50 MB." % label)
-    if text.startswith("\ufeff"):  # UTF-8 BOM from pasted or Windows-saved files; would hide the first header
-        text = text[1:]
+    return text[1:] if text.startswith("\ufeff") else text  # UTF-8 BOM would hide the first header
+
+
+def columns(text, name, label):
+    """Return {'columns': [...], 'id': auto id key or None, 'score': auto score key or None}."""
+    text = _prepare(text, label)
+    try:
+        _, keys = _records(text, name)
+    except InputError as e:
+        raise InputError("%s: %s" % (label, e))
+    return {"columns": keys, "id": _pick(keys, ID_KEYS), "score": _pick(keys, SCORE_KEYS)}
+
+
+def parse_side(text, name, label, id_key=None, score_key=None):
+    """Parse one file. Returns {'ids', 'scores': {id: [floats]}, 'rows': {id: [raw dicts]}, 'invalid', 'id_key',
+    'score_key'}. id_key/score_key override auto-detection when they name a column of this file."""
+    text = _prepare(text, label)
     try:
         recs, keys = _records(text, name)
     except InputError as e:
         raise InputError("%s: %s" % (label, e))
     if not recs:
         raise InputError("%s: file contains no rows." % label)
-    id_key = _pick(keys, ID_KEYS)
+    id_key = id_key if id_key and id_key in keys else _pick(keys, ID_KEYS)
     if id_key is None:
-        raise InputError("%s: no id column found (expected one of: %s)" % (label, ", ".join(ID_KEYS)))
-    score_key = _pick(keys, SCORE_KEYS)
+        raise ColumnError("%s: no id column found (expected one of: %s)" % (label, ", ".join(ID_KEYS)))
+    score_key = score_key if score_key and score_key in keys else _pick(keys, SCORE_KEYS)
     if score_key is None:
-        raise InputError("%s: no score column found (expected one of: %s)" % (label, ", ".join(SCORE_KEYS)))
-    scores, invalid = {}, []
+        raise ColumnError("%s: no score column found (expected one of: %s)" % (label, ", ".join(SCORE_KEYS)))
+    scores, rows, invalid = {}, {}, []
     for line, rec in recs:
         rid = rec.get(id_key)
         s = parse_score(rec.get(score_key))
@@ -106,7 +124,9 @@ def parse_side(text, name, label):
             invalid.append(line)
             continue
         scores.setdefault(rid, []).append(s)
-    return {"ids": list(scores), "scores": scores, "invalid": invalid}
+        rows.setdefault(rid, []).append(rec)
+    return {"ids": list(scores), "scores": scores, "rows": rows, "invalid": invalid,
+            "id_key": id_key, "score_key": score_key}
 
 
 def pair(a, b):

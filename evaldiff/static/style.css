@@ -14,7 +14,6 @@ h1 { margin: 0; } header p { margin: 4px 0 16px; color: var(--muted); }
 textarea { width: 100%; font: 13px ui-monospace, monospace; background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
 .filename { color: var(--muted); font-size: 0.9em; }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
-.settings { color: var(--muted); font-size: 0.9em; }
 button { padding: 6px 12px; } .primary { font-weight: 600; }
 #error { color: var(--bad); font-weight: 600; }
 #warnings { color: var(--warn); }
@@ -26,3 +25,26 @@ dt { color: var(--muted); font-size: 0.85em; } dd { margin: 0; font: 600 1.1em u
 .tables { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { border-bottom: 1px solid var(--line); padding: 3px 6px; text-align: left; }
+.settings { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 0 0 16px; }
+.settings input[type=number] { width: 7em; }
+.field-error { color: var(--bad); font-weight: 600; flex-basis: 100%; }
+.field-error:empty { display: none; }
+.mapping { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+.mapping h3 { margin: 0 0 8px; }
+.map-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .map-grid { grid-template-columns: 1fr; } }
+.map-grid fieldset { border: 1px solid var(--line); border-radius: 6px; }
+.map-grid label { display: block; margin: 4px 0; }
+.hint { color: var(--muted); margin: 8px 0 0; }
+#tests-table th[data-col=label] { font-weight: 400; }
+#tests-table tr.primary-row th, #tests-table tr.primary-row td { font-weight: 700; }
+.explorer-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+button[aria-pressed=true] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.th-btn { padding: 0 4px; font: inherit; font-weight: 700; background: none; color: inherit; border: none; cursor: pointer; text-decoration: underline dotted; }
+#rows-table tbody tr { cursor: pointer; }
+#rows-table tbody tr:hover, #rows-table tbody tr:focus { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
+#row-detail { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 12px; }
+#row-detail h4 { margin: 0 0 8px; }
+.detail-side ul { margin: 4px 0 8px; font-family: ui-monospace, monospace; }
+#summary { margin: 4px 0 12px; }
+section#results { overflow-x: auto; }

@@ -30,9 +30,101 @@ function showWarnings(list) {
   $("warnings").replaceChildren(...(list || []).map((w) => { const li = document.createElement("li"); li.textContent = w; return li; }));
 }
 
+// Read and validate the settings panel; returns null (and shows why) when a value is out of range.
+function readSettings() {
+  const num = (id) => $(id).value.trim() === "" ? NaN : Number($(id).value);
+  const nBoot = num("n-boot"), seed = num("seed"), threshold = num("threshold");
+  let msg = "";
+  if (!Number.isInteger(nBoot) || nBoot < 1000 || nBoot > 100000) msg = "Bootstrap resamples must be between 1000 and 100000";
+  else if (!Number.isSafeInteger(seed)) msg = "Seed must be an integer";
+  else if (!Number.isFinite(threshold)) msg = "Threshold must be a number";
+  $("settings-error").textContent = msg;
+  if (msg) return null;
+  return { alpha: Number($("alpha").value), seed, n_boot: nBoot, threshold,
+           primary: $("primary-test").value, wilcoxon_zero: $("wilcoxon-zero").value };
+}
+
+function fillMapping(cols) {
+  for (const k of ["a", "b"]) {
+    const c = cols[k];
+    for (const f of ["id", "score"]) {
+      const sel = $(`map-${k}-${f}`);
+      sel.replaceChildren(new Option("(choose a column)", ""), ...c.columns.map((h) => new Option(h, h)));
+      sel.value = c[f] || "";
+    }
+  }
+  $("mapping").hidden = false;
+}
+
+function readMapping() {
+  if ($("mapping").hidden) return null;
+  const m = {};
+  for (const k of ["a", "b"]) m[k] = { id: $(`map-${k}-id`).value, score: $(`map-${k}-score`).value };
+  return m;
+}
+
+const hideMapping = () => { $("mapping").hidden = true; };
+
+const statText = (t) => t.key.startsWith("mcnemar") ? `b = ${t.b}, c = ${t.c}`
+  : t.statistic === null ? "n/a" : t.key === "wilcoxon" ? String(+t.statistic.toFixed(4)) : f4(t.statistic);
+
+function renderTests(r) {
+  $("tests-table").querySelector("tbody").replaceChildren(...r.tests.map((t) => {
+    const tr = document.createElement("tr");
+    tr.dataset.test = t.key;
+    if (t.key === r.primary) tr.className = "primary-row";
+    const ci = t.ci ? `${sgn(t.ci[0])} to ${sgn(t.ci[1])}` : "";
+    for (const [col, v] of [["label", t.label], ["statistic", statText(t)], ["p", fp(t.p)], ["ci", ci]]) {
+      const td = document.createElement(col === "label" ? "th" : "td");
+      td.dataset.col = col; td.textContent = v; tr.appendChild(td);
+    }
+    return tr;
+  }));
+}
+
+// Flip explorer state; reset on every new result.
+const ex = { rows: [], byId: new Map(), filter: "all", sort: null, cell: String, mapping: null };
+
+function renderRows() {
+  const q = $("search-id").value.trim().toLowerCase();
+  let rows = ex.rows.filter((r) => (ex.filter === "all" || r.status === ex.filter) && r.id.toLowerCase().includes(q));
+  if (ex.sort) rows = rows.slice().sort((x, y) => ex.sort === "asc" ? x.d - y.d : y.d - x.d);
+  setRows("rows-table", rows, (x) => [x.id, ex.cell(x.a), ex.cell(x.b), sgn(x.d), x.status]);
+  for (const tr of $("rows-table").querySelectorAll("tbody tr")) tr.tabIndex = 0;
+  for (const b of document.querySelectorAll("[data-filter]")) b.setAttribute("aria-pressed", String(b.dataset.filter === ex.filter));
+  $("sort-delta").parentElement.setAttribute("aria-sort", ex.sort ? (ex.sort === "asc" ? "ascending" : "descending") : "none");
+}
+
+const rawText = (rec, idKey) => Object.entries(rec).filter(([k]) => k !== idKey)
+  .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(", ");
+
+function showDetail(id) {
+  const r = ex.byId.get(id);
+  if (!r) return;
+  const box = $("row-detail");
+  const h = document.createElement("h4");
+  h.textContent = `Row ${id} (${r.status}, Δ ${sgn(r.d)})`;
+  const close = document.createElement("button");
+  close.type = "button"; close.textContent = "Close"; close.addEventListener("click", () => { box.hidden = true; });
+  const parts = [h];
+  for (const [k, label] of [["a", "A"], ["b", "B"]]) {
+    const div = document.createElement("div");
+    div.className = "detail-side"; div.id = "row-detail-" + k;
+    const b = document.createElement("b"); b.textContent = label;
+    const ul = document.createElement("ul");
+    ul.replaceChildren(...r["raw_" + k].map((rec) => { const li = document.createElement("li"); li.textContent = rawText(rec, ex.mapping[k].id); return li; }));
+    div.append(b, ul);
+    parts.push(div);
+  }
+  parts.push(close);
+  box.replaceChildren(...parts);
+  box.hidden = false;
+}
+
 function render(r) {
   showWarnings(r.warnings);
   $("error").textContent = r.error || "";
+  if (r.columns) fillMapping(r.columns);
   if (r.error) { $("results").hidden = true; $("verdict").textContent = ""; return; }
   $("results").hidden = false;
   $("verdict").textContent = r.verdict;
@@ -47,7 +139,6 @@ function render(r) {
   $("ci-high").textContent = r.ci ? sgn(r.ci[1]) : "n/a";
   $("test-name").textContent = r.test;
   $("p-value").textContent = fp(r.p_value);
-  $("seed").textContent = r.seed;
   const fl = r.flips, cell = (x) => r.score_type === "binary" ? String(x) : f4(x);
   $("count-improved").textContent = fl.improved.length;
   $("count-regressed").textContent = fl.regressed.length;
@@ -57,13 +148,23 @@ function render(r) {
   setRows("regressed-table", fl.regressed, (x) => [x.id, cell(x.a), cell(x.b)]);
   $("changes").hidden = r.score_type !== "continuous";
   setRows("changes-table", r.changes, (x) => [x.id, f4(x.a), f4(x.b), sgn(x.d)]);
+  const unchanged = fl.both_pass + fl.both_fail;
+  $("summary").textContent = `${fl.improved.length} improved, ${fl.regressed.length} regressed, ${unchanged} unchanged. ` +
+    `If A and B were equally good, a difference at least this large would occur with probability ${fp(r.p_value)}.`;
+  renderTests(r);
+  Object.assign(ex, { rows: r.rows, byId: new Map(r.rows.map((x) => [x.id, x])), filter: "all", sort: null, cell, mapping: r.mapping });
+  $("search-id").value = "";
+  $("row-detail").hidden = true;
+  renderRows();
 }
 
 async function compare() {
+  const settings = readSettings();
+  if (!settings) return;
   const btn = $("compare-btn");
   btn.disabled = true;
   try {
-    const body = JSON.stringify({ a: await readSide("a"), b: await readSide("b") });
+    const body = JSON.stringify({ a: await readSide("a"), b: await readSide("b"), settings, mapping: readMapping() });
     const res = await fetch("/api/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body });
     render(await res.json());
   } catch (e) {
@@ -73,9 +174,22 @@ async function compare() {
   }
 }
 
+async function mapColumns() {
+  try {
+    const body = JSON.stringify({ a: await readSide("a"), b: await readSide("b") });
+    const res = await fetch("/api/columns", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    const cols = await res.json();
+    if (cols.error) throw new Error(cols.error);
+    fillMapping(cols);
+  } catch (e) {
+    $("error").textContent = e.message;
+  }
+}
+
 function copyFiles(list) { const dt = new DataTransfer(); for (const f of list) dt.items.add(f); return dt.files; }
 
 function swap() {
+  hideMapping();
   const fa = copyFiles($("file-a").files), fb = copyFiles($("file-b").files);
   $("file-a").files = fb; $("file-b").files = fa;
   for (const id of ["paste", "name"]) {
@@ -86,23 +200,31 @@ function swap() {
 
 let examples = [];
 async function loadExample() {
-  const ex = examples.find((e) => e.value === $("example-select").value);
-  if (!ex) return;
-  const texts = await Promise.all(ex.files.map((f) => fetch("/fixtures/" + f).then((r) => r.text())));
+  const sel = examples.find((e) => e.value === $("example-select").value);
+  if (!sel) return;
+  hideMapping();
+  const texts = await Promise.all(sel.files.map((f) => fetch("/fixtures/" + f).then((r) => r.text())));
   ["a", "b"].forEach((k, i) => {
     $("file-" + k).value = "";
     $("paste-" + k).value = texts[i];
-    $("name-" + k).textContent = ex.files[i];
+    $("name-" + k).textContent = sel.files[i];
   });
 }
 
 for (const k of ["a", "b"]) {
-  $("file-" + k).addEventListener("change", (e) => { $("name-" + k).textContent = e.target.files[0] ? e.target.files[0].name : ""; });
+  $("file-" + k).addEventListener("change", (e) => { hideMapping(); $("name-" + k).textContent = e.target.files[0] ? e.target.files[0].name : ""; });
   $("paste-" + k).addEventListener("input", () => { if (!$("file-" + k).files.length) $("name-" + k).textContent = ""; });
 }
 $("compare-btn").addEventListener("click", compare);
 $("swap-btn").addEventListener("click", swap);
 $("load-example").addEventListener("click", loadExample);
+$("map-columns").addEventListener("click", mapColumns);
+for (const b of document.querySelectorAll("[data-filter]")) b.addEventListener("click", () => { ex.filter = b.dataset.filter; renderRows(); });
+$("search-id").addEventListener("input", renderRows);
+$("sort-delta").addEventListener("click", () => { ex.sort = ex.sort === "asc" ? "desc" : "asc"; renderRows(); });
+const rowsBody = $("rows-table").querySelector("tbody");
+rowsBody.addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id); });
+rowsBody.addEventListener("keydown", (e) => { const tr = e.target.closest("tr"); if (tr && e.key === "Enter") showDetail(tr.dataset.id); });
 fetch("/api/examples").then((r) => r.json()).then((list) => {
   examples = list;
   $("example-select").replaceChildren(...list.map((e) => new Option(e.label, e.value)));

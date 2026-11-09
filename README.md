@@ -17,7 +17,15 @@ python3 -m evaldiff --port 9000 --host 127.0.0.1
 
 JSONL (one object per line) or CSV/TSV with a header. The id column is the first of `id`, `example_id`,
 `sample_id`; the score column is the first of `score`, `passed`, `pass`, `correct`, `value`, `result`
-(case-insensitive). Repeated ids are averaged. Example data lives in `fixtures/`.
+(case-insensitive). Repeated ids are averaged. Example data lives in `fixtures/`. If the columns have other
+names, click **Map columns** and pick them.
+
+## Analysis
+
+All paired tests run side by side: exact McNemar (and mid-p), sign-flip permutation, Wilcoxon signed-rank
+(`wilcox` or `pratt` zero handling) and a z-test. The settings panel sets alpha, seed, bootstrap resamples, the
+pass threshold for continuous scores and which test drives the verdict. The flip explorer filters, searches and
+sorts every paired example; click a row to see its raw fields.
 
 ## Tests
 
