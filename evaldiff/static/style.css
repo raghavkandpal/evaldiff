@@ -1,0 +1,28 @@
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ddd; --accent: #2457c5; --bad: #b42318; --good: #067647; --warn: #8a6100; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #141414; --fg: #eee; --muted: #aaa; --line: #333; --accent: #7aa2ff; --bad: #ff8a80; --good: #6fdc9c; --warn: #f2c94c; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 16px; font: 15px/1.45 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+header, main { max-width: 1000px; margin: 0 auto; }
+h1 { margin: 0; } header p { margin: 4px 0 16px; color: var(--muted); }
+.inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .inputs, .tables { grid-template-columns: 1fr !important; } }
+.panel { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.panel h2 { margin: 0 0 8px; font-size: 1.1em; }
+.panel label { display: block; margin-bottom: 8px; }
+textarea { width: 100%; font: 13px ui-monospace, monospace; background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
+.filename { color: var(--muted); font-size: 0.9em; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+.settings { color: var(--muted); font-size: 0.9em; }
+button { padding: 6px 12px; } .primary { font-weight: 600; }
+#error { color: var(--bad); font-weight: 600; }
+#warnings { color: var(--warn); }
+.verdict { font-size: 1.4em; font-weight: 700; margin: 8px 0; }
+#note { color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.stats div { border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+dt { color: var(--muted); font-size: 0.85em; } dd { margin: 0; font: 600 1.1em ui-monospace, monospace; }
+.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { border-bottom: 1px solid var(--line); padding: 3px 6px; text-align: left; }

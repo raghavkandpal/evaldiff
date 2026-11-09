@@ -1,0 +1,8 @@
+{"id":"c01","score":0.8,"alt_score":0.4,"cluster":"doc1"}
+{"id":"c02","score":0.85,"alt_score":0.5,"cluster":"doc1"}
+{"id":"c03","score":0.6,"alt_score":0.3,"cluster":"doc2"}
+{"id":"c04","score":0.85,"alt_score":0.6,"cluster":"doc2"}
+{"id":"c05","score":0.4,"alt_score":0.2,"cluster":"doc3"}
+{"id":"c06","score":0.85,"alt_score":0.7,"cluster":"doc3"}
+{"id":"c07","score":0.6,"alt_score":0.5,"cluster":"doc4"}
+{"id":"c08","score":0.55,"alt_score":0.6,"cluster":"doc4"}

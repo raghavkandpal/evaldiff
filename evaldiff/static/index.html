@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>evaldiff</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>evaldiff</h1>
+  <p>Is the difference between baseline A and candidate B real?</p>
+</header>
+<main>
+  <section class="inputs">
+    <div class="panel">
+      <h2>Baseline (A)</h2>
+      <label>File <input type="file" id="file-a" accept=".jsonl,.json,.csv,.tsv"></label>
+      <label>Or paste <textarea id="paste-a" rows="8" spellcheck="false"></textarea></label>
+      <div class="filename" id="name-a"></div>
+    </div>
+    <div class="panel">
+      <h2>Candidate (B)</h2>
+      <label>File <input type="file" id="file-b" accept=".jsonl,.json,.csv,.tsv"></label>
+      <label>Or paste <textarea id="paste-b" rows="8" spellcheck="false"></textarea></label>
+      <div class="filename" id="name-b"></div>
+    </div>
+  </section>
+  <section class="controls">
+    <label>Example <select id="example-select"></select></label>
+    <button type="button" id="load-example">Load example</button>
+    <button type="button" id="swap-btn">Swap A and B</button>
+    <button type="button" id="compare-btn" class="primary">Compare</button>
+    <span class="settings">alpha 0.05 · threshold 0.5 · seed <span id="seed">0</span></span>
+  </section>
+  <div id="error" role="alert"></div>
+  <ul id="warnings"></ul>
+  <section id="results" hidden>
+    <div id="verdict" class="verdict"></div>
+    <div id="note"></div>
+    <dl class="stats">
+      <div><dt>n paired</dt><dd id="n-paired"></dd></div>
+      <div><dt>Score type</dt><dd id="score-type"></dd></div>
+      <div><dt>Mean A</dt><dd id="mean-a"></dd></div>
+      <div><dt>Mean B</dt><dd id="mean-b"></dd></div>
+      <div><dt>Diff (B − A)</dt><dd id="diff"></dd></div>
+      <div><dt id="ci-label"></dt><dd><span id="ci-low"></span> to <span id="ci-high"></span></dd></div>
+      <div><dt id="test-name"></dt><dd>p = <span id="p-value"></span></dd></div>
+    </dl>
+    <h3>Flips</h3>
+    <p class="counts">Improved <b id="count-improved"></b> · Regressed <b id="count-regressed"></b> ·
+      Both pass <b id="count-both-pass"></b> · Both fail <b id="count-both-fail"></b></p>
+    <div class="tables">
+      <div><h4>Improved (fail → pass)</h4>
+        <table id="improved-table"><thead><tr><th>id</th><th>A</th><th>B</th></tr></thead><tbody></tbody></table></div>
+      <div><h4>Regressed (pass → fail)</h4>
+        <table id="regressed-table"><thead><tr><th>id</th><th>A</th><th>B</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div id="changes" hidden>
+      <h4>Largest score changes (top 20 by |Δ|)</h4>
+      <table id="changes-table"><thead><tr><th>id</th><th>A</th><th>B</th><th>Δ</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
