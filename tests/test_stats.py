@@ -364,12 +364,19 @@ class Sprint2Tests(unittest.TestCase):
         self.assertNotIn("error", r)  # evaluator bug 1: mapping for both sides, no error
         for k in "ab":
             self.assertEqual(r["columns"][k], {"columns": ["qid", "judge_score"], "id": None, "score": None})
-        self.assertEqual(r["missing_columns"], ["%s: no id column found (expected one of: id, example_id, sample_id)" % k
-                                                for k in "AB"])
+        # low-severity bug 2: each side lists both its missing id and its missing score column
+        self.assertEqual(r["missing_columns"], [m % k for k in "AB" for m in (
+            "%s: no id column found (expected one of: id, example_id, sample_id)",
+            "%s: no score column found (expected one of: score, passed, pass, correct, value, result)")])
         m = {k: {"id": "qid", "score": "judge_score"} for k in "ab"}
         r = paste(a, b, mapping=m)
+        self.assertTrue(r["mapped"])
         self.assertEqual(r["n"], 3)
         self.assertAlmostEqual(r["diff"], 1 / 3)
+        # low-severity bug 1: a stale mapping on files that auto-detect fine is not "mapped", so the panel hides
+        r = paste("id,score\na,1\nb,0", "id,score\na,1\nb,1", mapping=m)
+        self.assertFalse(r["mapped"])
+        self.assertEqual(r["n"], 2)
         r = paste("name,score\nz1,1", "id,score\nz1,1")
         self.assertEqual(r["columns"]["b"]["id"], "id")
         # other input errors are still errors, even when the other side also lacks a column
@@ -378,6 +385,7 @@ class Sprint2Tests(unittest.TestCase):
     def test_mapping_alt_score(self):
         m = {k: {"id": "id", "score": "alt_score"} for k in "ab"}
         r = fixture("f3_a.jsonl", "f3_b.jsonl", mapping=m)
+        self.assertTrue(r["mapped"])
         self.assertEqual(r["diff"], 0)
         self.assertEqual(r["p_value"], 1.0)
         self.assertEqual(r["verdict"], "No significant difference")

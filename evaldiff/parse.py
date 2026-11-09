@@ -103,7 +103,7 @@ def columns(text, name, label):
 
 def parse_side(text, name, label, id_key=None, score_key=None):
     """Parse one file. Returns {'ids', 'scores': {id: [floats]}, 'rows': {id: [raw dicts]}, 'invalid', 'id_key',
-    'score_key'}. id_key/score_key override auto-detection when they name a column of this file."""
+    'score_key', 'mapped'}. id_key/score_key override auto-detection when they name a column of this file."""
     text = _prepare(text, label)
     try:
         recs, keys = _records(text, name)
@@ -111,12 +111,16 @@ def parse_side(text, name, label, id_key=None, score_key=None):
         raise InputError("%s: %s" % (label, e))
     if not recs:
         raise InputError("%s: file contains no rows." % label)
-    id_key = id_key if id_key and id_key in keys else _pick(keys, ID_KEYS)
+    auto = _pick(keys, ID_KEYS), _pick(keys, SCORE_KEYS)
+    id_key = id_key if id_key and id_key in keys else auto[0]
+    score_key = score_key if score_key and score_key in keys else auto[1]
+    missing = []  # report both missing columns at once; ColumnError args are the messages
     if id_key is None:
-        raise ColumnError("%s: no id column found (expected one of: %s)" % (label, ", ".join(ID_KEYS)))
-    score_key = score_key if score_key and score_key in keys else _pick(keys, SCORE_KEYS)
+        missing.append("%s: no id column found (expected one of: %s)" % (label, ", ".join(ID_KEYS)))
     if score_key is None:
-        raise ColumnError("%s: no score column found (expected one of: %s)" % (label, ", ".join(SCORE_KEYS)))
+        missing.append("%s: no score column found (expected one of: %s)" % (label, ", ".join(SCORE_KEYS)))
+    if missing:
+        raise ColumnError(*missing)
     scores, rows, invalid = {}, {}, []
     for line, rec in recs:
         rid = rec.get(id_key)
@@ -128,7 +132,7 @@ def parse_side(text, name, label, id_key=None, score_key=None):
         scores.setdefault(rid, []).append(s)
         rows.setdefault(rid, []).append(rec)
     return {"ids": list(scores), "scores": scores, "rows": rows, "invalid": invalid,
-            "id_key": id_key, "score_key": score_key}
+            "id_key": id_key, "score_key": score_key, "mapped": (id_key, score_key) != auto}
 
 
 def pair(a, b):

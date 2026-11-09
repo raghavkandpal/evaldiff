@@ -74,7 +74,7 @@ def compare(payload):
                 sides.append(parse.parse_side(*_side(payload, k), k.upper(), (mapping.get(k) or {}).get("id"),
                                               (mapping.get(k) or {}).get("score")))
             except parse.ColumnError as e:  # keep going so the other side's problem is reported too
-                missing.append(str(e))
+                missing.extend(e.args)
     except parse.InputError as e:
         return {"error": str(e)}
     if missing:  # no error: the page offers column mapping instead (spec 2.2)
@@ -87,6 +87,7 @@ def compare(payload):
     for row in result["rows"]:
         row["raw_a"], row["raw_b"] = sides[0]["rows"][row["id"]], sides[1]["rows"][row["id"]]
     result["mapping"] = {k: {"id": s["id_key"], "score": s["score_key"]} for k, s in zip("ab", sides)}
+    result["mapped"] = any(s["mapped"] for s in sides)  # False: auto-detection was enough, the page hides mapping
     return result
 
 

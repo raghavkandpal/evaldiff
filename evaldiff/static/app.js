@@ -30,20 +30,26 @@ function showWarnings(list) {
   $("warnings").replaceChildren(...(list || []).map((w) => { const li = document.createElement("li"); li.textContent = w; return li; }));
 }
 
-// Read and validate the settings panel; returns null (and shows why) when a value is out of range.
-function readSettings() {
-  const num = (id) => $(id).value.trim() === "" ? NaN : Number($(id).value);
+const num = (id) => $(id).value.trim() === "" ? NaN : Number($(id).value);
+
+// Show the inline settings message (on input too); returns it, "" when valid.
+function validateSettings() {
   const nBoot = num("n-boot"), seed = num("seed"), threshold = num("threshold");
   let msg = "";
   if (!Number.isInteger(nBoot) || nBoot < 1000 || nBoot > 100000) msg = "Bootstrap resamples must be between 1000 and 100000";
   else if (!Number.isSafeInteger(seed)) msg = "Seed must be an integer";
   else if (!Number.isFinite(threshold)) msg = "Threshold must be a number";
   $("settings-error").textContent = msg;
-  if (msg) {  // results on screen no longer match the settings on screen
+  return msg;
+}
+
+// Read the settings panel; returns null when a value is invalid.
+function readSettings() {
+  if (validateSettings()) {  // results on screen no longer match the settings on screen
     $("results").hidden = true; $("verdict").textContent = "";
     return null;
   }
-  return { alpha: Number($("alpha").value), seed, n_boot: nBoot, threshold,
+  return { alpha: Number($("alpha").value), seed: num("seed"), n_boot: num("n-boot"), threshold: num("threshold"),
            primary: $("primary-test").value, wilcoxon_zero: $("wilcoxon-zero").value };
 }
 
@@ -67,7 +73,7 @@ function readMapping() {
   return m;
 }
 
-const hideMapping = () => { $("mapping").hidden = true; };
+const hideMapping = () => { $("mapping").hidden = true; $("mapping-missing").replaceChildren(); };
 
 const statText = (t) => t.key.startsWith("mcnemar") ? `b = ${t.b}, c = ${t.c}`
   : t.statistic === null ? "n/a" : t.key === "wilcoxon" ? String(+t.statistic.toFixed(4)) : f4(t.statistic);
@@ -94,7 +100,13 @@ function renderRows() {
   let rows = ex.rows.filter((r) => (ex.filter === "all" || r.status === ex.filter) && r.id.toLowerCase().includes(q));
   if (ex.sort) rows = rows.slice().sort((x, y) => ex.sort === "asc" ? x.d - y.d : y.d - x.d);
   setRows("rows-table", rows, (x) => [x.id, ex.cell(x.a), ex.cell(x.b), sgn(x.d), x.status]);
-  for (const tr of $("rows-table").querySelectorAll("tbody tr")) tr.tabIndex = 0;
+  for (const tr of $("rows-table").querySelectorAll("tbody tr")) {  // the id cell is the keyboard/screen-reader control
+    const td = tr.children[0], b = document.createElement("button");
+    b.type = "button"; b.className = "row-btn"; b.textContent = tr.dataset.id;
+    b.setAttribute("aria-label", `Show raw fields for ${tr.dataset.id}`);
+    b.setAttribute("aria-controls", "row-detail");
+    td.replaceChildren(b);
+  }
   for (const b of document.querySelectorAll("[data-filter]")) b.setAttribute("aria-pressed", String(b.dataset.filter === ex.filter));
   $("sort-delta").parentElement.setAttribute("aria-sort", ex.sort ? (ex.sort === "asc" ? "ascending" : "descending") : "none");
 }
@@ -108,7 +120,13 @@ function showDetail(id) {
   const h = document.createElement("h4");
   h.textContent = `Row ${id} (${r.status}, Δ ${sgn(r.d)})`;
   const close = document.createElement("button");
-  close.type = "button"; close.textContent = "Close"; close.addEventListener("click", () => { box.hidden = true; });
+  close.type = "button"; close.textContent = "Close";
+  close.addEventListener("click", () => {  // return the user to the row they opened
+    box.hidden = true;
+    const tr = $("rows-table").querySelector(`tbody tr[data-id="${CSS.escape(id)}"]`);
+    const b = tr && tr.querySelector("button");
+    if (b) { b.focus(); tr.scrollIntoView({ block: "nearest" }); }
+  });
   const parts = [h];
   for (const [k, label] of [["a", "A"], ["b", "B"]]) {
     const div = document.createElement("div");
@@ -130,6 +148,7 @@ function render(r) {
   showWarnings(r.warnings);
   $("error").textContent = r.error || "";
   if (r.columns) fillMapping(r.columns, r.missing_columns);
+  else if (!r.mapped) hideMapping();  // this comparison did not need the user's mapping
   if (r.error || r.columns) { $("results").hidden = true; $("verdict").textContent = ""; return; }
   $("results").hidden = false;
   $("verdict").textContent = r.verdict;
@@ -232,7 +251,7 @@ $("search-id").addEventListener("input", renderRows);
 $("sort-delta").addEventListener("click", () => { ex.sort = ex.sort === "asc" ? "desc" : "asc"; renderRows(); });
 const rowsBody = $("rows-table").querySelector("tbody");
 rowsBody.addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id); });
-rowsBody.addEventListener("keydown", (e) => { const tr = e.target.closest("tr"); if (tr && e.key === "Enter") showDetail(tr.dataset.id); });
+for (const id of ["n-boot", "seed", "threshold"]) for (const t of ["input", "change"]) $(id).addEventListener(t, validateSettings);
 fetch("/api/examples").then((r) => r.json()).then((list) => {
   examples = list;
   $("example-select").replaceChildren(...list.map((e) => new Option(e.label, e.value)));
