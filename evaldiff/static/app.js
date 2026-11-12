@@ -282,13 +282,14 @@ async function updatePower() {
   $("pd").textContent = binary ? f4(r.pd) : "";
   $("var-d").textContent = binary && !trials ? "" : r.var_d.toFixed(6);
   $("power-method").textContent = binary ? "Connor (paired binary)" : "Paired normal approximation (Miller 2024)";
+  if (trials) $("power-method").textContent += " with trials";
+  const seq = ++powerSeq;  // before any early return, so replies to older inputs are dropped
   let value = noVar ? 0 : observed;
   const withTrials = trials && !binary;  // binary power is driven by p_d, which has no trial decomposition
   if (withTrials && whatifMsg()) { clearPower(); return; }  // invalid what-if input: power shows n/a, not stale numbers
   if (withTrials && !noVar) value = Math.max(0, r.noise.omega2) + noiseAt(r.noise, ...whatif(r.noise));
   const assumedId = binary ? "assumed-pd" : "assumed-sd";
   if (noVar && $(assumedId).value.trim() !== "") { const a = num(assumedId); value = binary ? a : a * a; }
-  const seq = ++powerSeq;
   const p = await postJSON("/api/power", { design: r.score_type, value, alpha: r.alpha, power: num("target-power"),
                                           effect: num("target-effect"), n: r.n });
   if (seq !== powerSeq) return;
