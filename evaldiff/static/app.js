@@ -113,7 +113,7 @@ function renderRows() {
 
 const rawText = (rec) => Object.entries(rec).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join(", ");
 
-function showDetail(id) {
+function showDetail(id, tableId = "rows-table") {
   const r = ex.byId.get(id);
   if (!r) return;
   const box = $("row-detail");
@@ -123,7 +123,7 @@ function showDetail(id) {
   close.type = "button"; close.textContent = "Close";
   close.addEventListener("click", () => {  // return the user to the row they opened
     box.hidden = true;
-    const tr = $("rows-table").querySelector(`tbody tr[data-id="${CSS.escape(id)}"]`);
+    const tr = $(tableId).querySelector(`tbody tr[data-id="${CSS.escape(id)}"]`);
     const b = tr && tr.querySelector("button");
     if (b) { b.focus(); tr.scrollIntoView({ block: "nearest" }); }
   });
@@ -195,6 +195,72 @@ function renderChart(table) {
   }
 }
 
+const v6 = (x) => x.toFixed(6), pct = (x) => x === null ? "n/a" : (x * 100).toFixed(1) + "%";
+const kfmt = (x) => String(+x.toFixed(2));
+const NEEDS_J = "n/a (needs ≥2 judge runs)", NEEDS_K = "n/a (needs ≥2 trials)";
+
+// Noise a side adds to Var(d) when run with K' trials and J' judge runs per trial.
+const sideNoiseAt = (s, k, j) => (s.sg || 0) / k + (s.sj ? s.sj / (k * j) : 0);
+const noiseAt = (nz, k, j) => sideNoiseAt(nz.a, k, j) + sideNoiseAt(nz.b, k, j);
+// What-if K' and J' (blank or invalid: the current design); returns [K', J'].
+function whatifMsg() {
+  const ok = (id) => $(id).value.trim() === "" || (Number.isInteger(num(id)) && num(id) >= 1);
+  return ok("whatif-k") && ok("whatif-j") ? "" : "What-if K′ and J′ must be whole numbers of at least 1";
+}
+function whatif(nz) {
+  const bad = whatifMsg() !== "", k = num("whatif-k"), j = num("whatif-j");
+  return [!bad && k >= 1 ? k : (nz.a.k + nz.b.k) / 2, !bad && j >= 1 ? j : (nz.a.j + nz.b.j) / 2];
+}
+
+function updateWhatif() {
+  const nz = last && last.noise;
+  if (!nz || !nz.repeated) return;
+  const msg = whatifMsg();
+  $("whatif-error").textContent = msg;
+  const [k, j] = whatif(nz);
+  $("whatif-se").textContent = msg || nz.var_d === null ? "n/a" : f4(Math.sqrt((Math.max(0, nz.omega2) + noiseAt(nz, k, j)) / last.n));
+}
+
+function renderNoise(r) {
+  const nz = r.noise;
+  $("noise-none").hidden = nz.repeated; $("noise-body").hidden = !nz.repeated;
+  if (!nz.repeated) {  // do not leave the previous comparison's numbers in the hidden panel
+    for (const e of $("noise-body").querySelectorAll("td[id], dd[id], small[id], b[id], span[id]")) e.textContent = "";  // leaf value elements only
+    for (const id of ["whatif-k", "whatif-j"]) $(id).value = "";
+    $("noise-warning").textContent = ""; $("noise-warning").hidden = true;
+    $("unstable-table").querySelector("tbody").replaceChildren();
+    return;
+  }
+  for (const k of ["a", "b"]) {
+    const s = nz[k], nest = s.nested;
+    $("k-" + k).textContent = kfmt(s.k); $("j-" + k).textContent = kfmt(s.j);
+    $("sigma2-" + k).textContent = nest ? "n/a (judge runs present)" : s.sg === null ? NEEDS_K : v6(s.sg);
+    $("sigmaj-" + k).textContent = s.sj === null ? NEEDS_J : v6(s.sj);
+    $("sigmag-" + k).textContent = s.sg === null ? NEEDS_K : nest ? v6(s.sg) : "n/a (no judge runs)";
+    $("judge-disagree-" + k).textContent = s.disagree === null ? NEEDS_J : pct(s.disagree);
+    $("judge-disagree-count-" + k).textContent = s.disagree === null ? "" : `(${s.disagree_n} of ${s.disagree_cells})`;
+  }
+  const nest = nz.a.nested || nz.b.nested;
+  const noGen = nz.a.sg === null && nz.b.sg === null, noJudge = nz.a.sj === null && nz.b.sj === null;
+  $("var-d-noise").textContent = nz.var_d === null ? "n/a" : v6(nz.var_d);
+  $("noise-share").textContent = nest ? "n/a" : pct(nz.noise_share);
+  $("gen-share").textContent = !nest ? "n/a" : noGen ? NEEDS_K : pct(nz.gen_share);
+  $("judge-share").textContent = !nest ? "n/a" : noJudge ? NEEDS_J : pct(nz.judge_share);
+  $("signal-share").textContent = pct(nz.signal_share);
+  $("omega2").textContent = nz.omega2 === null ? "n/a" : v6(Math.max(0, nz.omega2));  // clamped, like the signal share
+  $("noise-warning").hidden = !nz.warning; $("noise-warning").textContent = nz.warning;
+  $("whatif-k").value = Math.max(1, Math.round((nz.a.k + nz.b.k) / 2));
+  $("whatif-j").value = Math.max(1, Math.round((nz.a.j + nz.b.j) / 2));
+  setRows("unstable-table", nz.unstable, (x) => [x.id, x.a.toFixed(2), x.b.toFixed(2)]);
+  for (const tr of $("unstable-table").querySelectorAll("tbody tr")) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "row-btn"; b.textContent = tr.dataset.id;
+    b.setAttribute("aria-controls", "row-detail");
+    tr.children[0].replaceChildren(b);
+  }
+  updateWhatif();
+}
+
 function clearPower() {
   for (const id of ["mde", "n-required"]) $(id).textContent = "n/a";
   $("n-required-note").textContent = "";
@@ -211,20 +277,25 @@ async function updatePower() {
   const noVar = !(observed > 1e-15);  // all-equal differences can leave float dust in Var(d)
   $("power-variation").hidden = !noVar;
   $("assumed-pd-label").hidden = !binary; $("assumed-sd-label").hidden = binary;
-  $("pd-box").hidden = !binary; $("var-d-box").hidden = binary;
+  const trials = !!(r.noise && r.noise.repeated);
+  $("pd-box").hidden = !binary; $("var-d-box").hidden = binary && !trials;
   $("pd").textContent = binary ? f4(r.pd) : "";
-  $("var-d").textContent = binary ? "" : r.var_d.toFixed(6);
+  $("var-d").textContent = binary && !trials ? "" : r.var_d.toFixed(6);
   $("power-method").textContent = binary ? "Connor (paired binary)" : "Paired normal approximation (Miller 2024)";
+  if (trials) $("power-method").textContent += " with trials";
+  const seq = ++powerSeq;  // before any early return, so replies to older inputs are dropped
   let value = noVar ? 0 : observed;
+  const withTrials = trials && !binary;  // binary power is driven by p_d, which has no trial decomposition
+  if (withTrials && whatifMsg()) { clearPower(); return; }  // invalid what-if input: power shows n/a, not stale numbers
+  if (withTrials && !noVar) value = Math.max(0, r.noise.omega2) + noiseAt(r.noise, ...whatif(r.noise));
   const assumedId = binary ? "assumed-pd" : "assumed-sd";
   if (noVar && $(assumedId).value.trim() !== "") { const a = num(assumedId); value = binary ? a : a * a; }
-  const seq = ++powerSeq;
   const p = await postJSON("/api/power", { design: r.score_type, value, alpha: r.alpha, power: num("target-power"),
                                           effect: num("target-effect"), n: r.n });
   if (seq !== powerSeq) return;
   $("power-error").textContent = p.error || "";
   if (p.error) { clearPower(); return; }
-  $("power-method").textContent = p.method;
+  $("power-method").textContent = p.method + (trials ? " with trials" : "");
   $("mde").textContent = p.mde === null ? "n/a" : f4(p.mde);
   $("n-required").textContent = p.n_required === null ? "n/a" : String(p.n_required);
   $("n-required-note").textContent = p.n_required_note || "";
@@ -263,7 +334,7 @@ function render(r) {
   $("error").textContent = r.error || "";
   if (r.columns) fillMapping(r.columns, r.missing_columns);
   else if (!r.mapped) hideMapping();  // this comparison did not need the user's mapping
-  if (r.error || r.columns) { $("results").hidden = true; $("verdict").textContent = ""; return; }
+  if (r.error || r.columns) { $("results").hidden = true; $("verdict").textContent = ""; renderNoise({ noise: { repeated: false } }); return; }
   $("results").hidden = false;
   $("verdict").textContent = r.verdict;
   $("note").textContent = r.note;
@@ -272,6 +343,7 @@ function render(r) {
   $("mean-a").textContent = f4(r.mean_a);
   $("mean-b").textContent = f4(r.mean_b);
   $("diff").textContent = sgn(r.diff);
+  $("se-paired").textContent = r.var_d === null ? "n/a" : f4(Math.sqrt(r.var_d / r.n));
   $("ci-label").textContent = r.ci_label;
   $("ci-low").textContent = r.ci ? sgn(r.ci[0]) : "n/a";
   $("ci-high").textContent = r.ci ? sgn(r.ci[1]) : "n/a";
@@ -295,6 +367,7 @@ function render(r) {
   $("search-id").value = "";
   $("row-detail").hidden = true;
   renderRows();
+  renderNoise(r);
 }
 
 async function compare() {
@@ -360,6 +433,8 @@ $("map-columns").addEventListener("click", mapColumns);
 for (const b of document.querySelectorAll("[data-filter]")) b.addEventListener("click", () => { ex.filter = b.dataset.filter; renderRows(); });
 $("search-id").addEventListener("input", renderRows);
 $("sort-delta").addEventListener("click", () => { ex.sort = ex.sort === "asc" ? "desc" : "asc"; renderRows(); });
+for (const id of ["whatif-k", "whatif-j"]) $(id).addEventListener("input", () => { updateWhatif(); updatePower(); });
+$("unstable-table").querySelector("tbody").addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id, "unstable-table"); });
 const rowsBody = $("rows-table").querySelector("tbody");
 rowsBody.addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id); });
 for (const id of ["target-power", "target-effect", "assumed-pd", "assumed-sd"]) $(id).addEventListener("input", () => { updatePower(); updatePlan(); });

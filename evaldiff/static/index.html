@@ -66,6 +66,7 @@
     <div id="note"></div>
     <p id="summary"></p>
     <dl class="stats">
+      <div><dt>Paired SE</dt><dd id="se-paired"></dd></div>
       <div><dt>n paired</dt><dd id="n-paired"></dd></div>
       <div><dt>Score type</dt><dd id="score-type"></dd></div>
       <div><dt>Mean A</dt><dd id="mean-a"></dd></div>
@@ -100,6 +101,37 @@
     <table id="rows-table"><thead><tr><th>id</th><th>A</th><th>B</th>
       <th aria-sort="none"><button type="button" id="sort-delta" class="th-btn">Δ</button></th><th>Status</th></tr></thead><tbody></tbody></table>
     <div id="row-detail" tabindex="-1" hidden></div>
+    <section id="noise" class="power" aria-labelledby="noise-h">
+      <h3 id="noise-h">Trial and judge noise</h3>
+      <p id="noise-none">No repeated trials or judge re-runs found.</p>
+      <div id="noise-body" hidden>
+        <p id="noise-warning" class="field-error" hidden></p>
+        <table id="noise-table"><thead><tr><th></th><th>A</th><th>B</th></tr></thead><tbody>
+          <tr><th>Mean trials per id (K)</th><td id="k-a"></td><td id="k-b"></td></tr>
+          <tr><th>Mean judge runs per trial (J)</th><td id="j-a"></td><td id="j-b"></td></tr>
+          <tr><th>Within-example variance σ²</th><td id="sigma2-a"></td><td id="sigma2-b"></td></tr>
+          <tr><th>Judge variance σ<sub>J</sub>²</th><td id="sigmaj-a"></td><td id="sigmaj-b"></td></tr>
+          <tr><th>Generation variance σ<sub>G</sub>²</th><td id="sigmag-a"></td><td id="sigmag-b"></td></tr>
+          <tr><th>Judge disagreement rate</th><td><span id="judge-disagree-a"></span> <small id="judge-disagree-count-a"></small></td><td><span id="judge-disagree-b"></span> <small id="judge-disagree-count-b"></small></td></tr>
+        </tbody></table>
+        <dl class="stats">
+          <div><dt>Var(d) (also in the power panel)</dt><dd id="var-d-noise"></dd></div>
+          <div><dt>Noise share</dt><dd id="noise-share"></dd></div>
+          <div><dt>Generation share</dt><dd id="gen-share"></dd></div>
+          <div><dt>Judge share</dt><dd id="judge-share"></dd></div>
+          <div><dt>Signal share</dt><dd id="signal-share"></dd></div>
+          <div><dt>Signal variance ω²</dt><dd id="omega2"></dd></div>
+        </dl>
+        <div class="power-inputs">
+          <label>What-if trials K′ <input type="number" id="whatif-k" min="1" step="1"></label>
+          <label>What-if judge runs J′ <input type="number" id="whatif-j" min="1" step="1"></label>
+          <span id="whatif-error" class="field-error" role="alert"></span>
+          <span>Projected paired SE: <b id="whatif-se"></b></span>
+        </div>
+        <h4>Unstable examples</h4>
+        <table id="unstable-table"><thead><tr><th>id</th><th>A fraction</th><th>B fraction</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
     <section id="power" class="power" aria-labelledby="power-h">
       <h3 id="power-h">Power and minimum detectable effect</h3>
       <div class="power-inputs">

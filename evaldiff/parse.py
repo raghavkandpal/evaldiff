@@ -121,7 +121,8 @@ def parse_side(text, name, label, id_key=None, score_key=None):
         missing.append("%s: no score column found (expected one of: %s)" % (label, ", ".join(SCORE_KEYS)))
     if missing:
         raise ColumnError(*missing)
-    scores, rows, invalid = {}, {}, []
+    trial_key, judge_key = _pick(keys, ("trial",)), _pick(keys, ("judge_run",))
+    scores, rows, invalid, cells = {}, {}, [], {}
     for line, rec in recs:
         rid = rec.get(id_key)
         s = parse_score(rec.get(score_key))
@@ -129,9 +130,18 @@ def parse_side(text, name, label, id_key=None, score_key=None):
         if s is None or rid == "":  # shortcut: rows without an id are reported as invalid too
             invalid.append(line)
             continue
+        cur = cells.setdefault(rid, {})
+        t = rec.get(trial_key) if trial_key is not None else None
+        t = "" if t is None else str(t).strip()
+        # a missing trial is trial 1, except that rows with no trial/judge column at all are successive trials
+        trial = t or ("1" if trial_key is not None or judge_key is not None else str(len(cur) + 1))
+        if judge_key is None:  # without a judge_run column a repeated (id, trial) is another trial, not a judge re-run
+            while trial in cur:
+                trial = str(int(trial) + 1) if trial.isdigit() else trial + "'"
+        cur.setdefault(trial, []).append(s)
         scores.setdefault(rid, []).append(s)
         rows.setdefault(rid, []).append(rec)
-    return {"ids": list(scores), "scores": scores, "rows": rows, "invalid": invalid,
+    return {"ids": list(scores), "scores": scores, "rows": rows, "cells": cells, "invalid": invalid,
             "id_key": id_key, "score_key": score_key, "mapped": (id_key, score_key) != auto}
 
 
