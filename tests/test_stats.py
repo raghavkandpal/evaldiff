@@ -517,7 +517,9 @@ class Sprint3Power(unittest.TestCase):
 class TestNoise(unittest.TestCase):
     def run_fix(self, a, b):
         from evaldiff.server import compare
-        rd = lambda f: {"name": f, "text": open(os.path.join(FIX, f)).read()}
+        def rd(f):
+            with open(os.path.join(FIX, f)) as fh:
+                return {"name": f, "text": fh.read()}
         return compare({"a": rd(a), "b": rd(b)})
 
     def test_f4(self):
@@ -562,7 +564,9 @@ class TestNoise(unittest.TestCase):
         self.assertEqual(self.run_fix("f1_a.csv", "f1_b.csv")["noise"], {"repeated": False})
         # trial-1 rows of F4 only
         from evaldiff.server import compare
-        keep = lambda f: "".join(l for l in open(os.path.join(FIX, f)) if '"trial":1' in l)
+        def keep(f):
+            with open(os.path.join(FIX, f)) as fh:
+                return "".join(l for l in fh if '"trial":1' in l)
         r = compare({"a": {"text": keep("f4_a.jsonl")}, "b": {"text": keep("f4_b.jsonl")}})
         self.assertEqual(r["noise"], {"repeated": False})
 
@@ -574,6 +578,26 @@ class TestNoise(unittest.TestCase):
         self.assertAlmostEqual(nz["a"]["sg"], 0.5)  # only x has K_i >= 2
         self.assertAlmostEqual(nz["a"]["gen"], 0.5 * (1 / 2 + 1 + 1) / 3)
         self.assertIsNone(nz["b"]["sg"])
+
+    def test_trial_keys_and_single_pair(self):
+        from evaldiff.server import compare
+        # same (id, trial) twice with no judge_run column: two trials, not two judge runs
+        dup = '{"id":"x","trial":1,"score":0}\n{"id":"x","trial":1,"score":1}\n{"id":"x","score":1}\n'
+        one = '{"id":"x","score":1}\n'
+        nz = compare({"a": {"text": dup}, "b": {"text": one}})["noise"]
+        self.assertEqual((nz["a"]["k"], nz["a"]["j"], nz["a"]["nested"]), (3, 1, False))
+        # n = 1: repeated trials are reported, Var(d) is undefined
+        self.assertTrue(nz["repeated"])
+        self.assertIsNone(nz["var_d"])
+        self.assertIsNone(nz["omega2"])
+        self.assertIn("undefined", nz["warning"])
+        # judge runs only: generation variance cannot be estimated
+        jr = '{"id":"x","judge_run":1,"score":0}\n{"id":"x","judge_run":2,"score":1}\n' \
+             '{"id":"y","judge_run":1,"score":1}\n{"id":"y","judge_run":2,"score":1}\n'
+        nz = compare({"a": {"text": jr}, "b": {"text": jr}})["noise"]
+        self.assertTrue(nz["a"]["nested"])
+        self.assertIsNone(nz["a"]["sg"])
+        self.assertEqual(nz["a"]["k"], 1)
 
 
 if __name__ == "__main__":

@@ -112,7 +112,7 @@
           <tr><th>Within-example variance σ²</th><td id="sigma2-a"></td><td id="sigma2-b"></td></tr>
           <tr><th>Judge variance σ<sub>J</sub>²</th><td id="sigmaj-a"></td><td id="sigmaj-b"></td></tr>
           <tr><th>Generation variance σ<sub>G</sub>²</th><td id="sigmag-a"></td><td id="sigmag-b"></td></tr>
-          <tr><th>Judge disagreement rate</th><td id="judge-disagree-a"></td><td id="judge-disagree-b"></td></tr>
+          <tr><th>Judge disagreement rate</th><td><span id="judge-disagree-a"></span> <small id="judge-disagree-count-a"></small></td><td><span id="judge-disagree-b"></span> <small id="judge-disagree-count-b"></small></td></tr>
         </tbody></table>
         <dl class="stats">
           <div><dt>Var(d) (also in the power panel)</dt><dd id="var-d-noise"></dd></div>
@@ -125,6 +125,7 @@
         <div class="power-inputs">
           <label>What-if trials K′ <input type="number" id="whatif-k" min="1" step="1"></label>
           <label>What-if judge runs J′ <input type="number" id="whatif-j" min="1" step="1"></label>
+          <span id="whatif-error" class="field-error" role="alert"></span>
           <span>Projected paired SE: <b id="whatif-se"></b></span>
         </div>
         <h4>Unstable examples</h4>

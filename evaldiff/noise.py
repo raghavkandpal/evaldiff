@@ -37,12 +37,12 @@ def side(cells, ids):
 def analyze(ids, ca, cb, var_d):
     """The #noise panel numbers. var_d is Var(d) of the per-id differences, or None when n < 2."""
     rows = lambda c: sum(len(x) for i in ids for x in c[i].values())
-    if var_d is None or rows(ca) == len(ids) and rows(cb) == len(ids):
+    if rows(ca) == len(ids) and rows(cb) == len(ids):
         return {"repeated": False}
     a, b = side(ca, ids), side(cb, ids)
     nested = a["nested"] or b["nested"]
     gen, judge = a["gen"] + b["gen"], a["judge"] + b["judge"]
-    share = (lambda x: x / var_d) if var_d > 0 else (lambda x: None)
+    share = (lambda x: x / var_d) if var_d else (lambda x: None)  # None: Var(d) is 0 or undefined
     noise_share = share(gen + judge)
     binary = all(s in (0.0, 1.0) for c in (ca, cb) for i in ids for x in c[i].values() for s in x)
     unstable = []
@@ -51,10 +51,12 @@ def analyze(ids, ca, cb, var_d):
         unstable = [{"id": i, "a": frac(ca, i), "b": frac(cb, i)} for i in ids
                     if 0 < frac(ca, i) < 1 or 0 < frac(cb, i) < 1]
     n = len(ids)
-    warn = ("Estimated noise exceeds the observed variance of differences (n = %d); the signal variance is "
-            "clamped at 0 and the noise estimate is itself uncertain." % n) if gen + judge > var_d + 1e-12 else ""
-    return {"repeated": True, "nested": nested, "a": a, "b": b, "var_d": var_d, "se_paired": (var_d / n) ** 0.5,
-            "omega2": var_d - gen - judge, "noise_share": noise_share,
+    warn = "Var(d) is undefined with fewer than 2 ids; shares and projections are unavailable." if var_d is None else ""
+    if var_d is not None and gen + judge > var_d + 1e-12:
+        warn = ("Estimated noise exceeds the observed variance of differences (n = %d); the signal variance is "
+            "clamped at 0 and the noise estimate is itself uncertain." % n)
+    return {"repeated": True, "nested": nested, "a": a, "b": b, "var_d": var_d, "se_paired": None if var_d is None else (var_d / n) ** 0.5,
+            "omega2": None if var_d is None else var_d - gen - judge, "noise_share": noise_share,
             "gen_share": share(gen), "judge_share": share(judge),
             "signal_share": None if noise_share is None else max(0.0, 1 - noise_share),
             "unstable": unstable, "warning": warn}
