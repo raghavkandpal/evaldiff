@@ -225,7 +225,7 @@ function renderNoise(r) {
   const nz = r.noise;
   $("noise-none").hidden = nz.repeated; $("noise-body").hidden = !nz.repeated;
   if (!nz.repeated) {  // do not leave the previous comparison's numbers in the hidden panel
-    for (const e of $("noise-body").querySelectorAll("td, dd, small, b, span")) e.textContent = "";
+    for (const e of $("noise-body").querySelectorAll("td[id], dd[id], small[id], b[id], span[id]")) e.textContent = "";  // leaf value elements only
     for (const id of ["whatif-k", "whatif-j"]) $(id).value = "";
     $("noise-warning").textContent = ""; $("noise-warning").hidden = true;
     $("unstable-table").querySelector("tbody").replaceChildren();
@@ -284,6 +284,7 @@ async function updatePower() {
   $("power-method").textContent = binary ? "Connor (paired binary)" : "Paired normal approximation (Miller 2024)";
   let value = noVar ? 0 : observed;
   const withTrials = trials && !binary;  // binary power is driven by p_d, which has no trial decomposition
+  if (withTrials && whatifMsg()) { clearPower(); return; }  // invalid what-if input: power shows n/a, not stale numbers
   if (withTrials && !noVar) value = Math.max(0, r.noise.omega2) + noiseAt(r.noise, ...whatif(r.noise));
   const assumedId = binary ? "assumed-pd" : "assumed-sd";
   if (noVar && $(assumedId).value.trim() !== "") { const a = num(assumedId); value = binary ? a : a * a; }
