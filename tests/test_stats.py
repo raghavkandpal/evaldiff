@@ -514,5 +514,67 @@ class Sprint3Power(unittest.TestCase):
                 self.assertNotIn("observed power", fh.read().lower())
 
 
+class TestNoise(unittest.TestCase):
+    def run_fix(self, a, b):
+        from evaldiff.server import compare
+        rd = lambda f: {"name": f, "text": open(os.path.join(FIX, f)).read()}
+        return compare({"a": rd(a), "b": rd(b)})
+
+    def test_f4(self):
+        r = self.run_fix("f4_a.jsonl", "f4_b.jsonl")
+        nz = r["noise"]
+        self.assertAlmostEqual(nz["a"]["sg"], 0.01)
+        self.assertAlmostEqual(nz["b"]["sg"], 0.01)
+        self.assertEqual((nz["a"]["k"], nz["b"]["k"]), (2, 2))
+        self.assertAlmostEqual(nz["var_d"], 0.016667, places=6)
+        self.assertAlmostEqual(nz["noise_share"], 0.6)
+        self.assertAlmostEqual(nz["signal_share"], 0.4)
+        self.assertAlmostEqual(nz["omega2"], 0.006667, places=6)
+        self.assertAlmostEqual(nz["se_paired"], 0.0645, places=4)
+        omega = nz["omega2"]
+        se = lambda k: ((omega + (nz["a"]["sg"] + nz["b"]["sg"]) / k) / 4) ** 0.5
+        self.assertAlmostEqual(se(4), 0.0540, places=4)
+        self.assertAlmostEqual((omega / 4) ** 0.5, 0.0408, places=4)
+        self.assertEqual(nz["warning"], "")
+
+    def test_f7(self):
+        r = self.run_fix("f7_a.jsonl", "f7_b.jsonl")
+        nz = r["noise"]
+        self.assertEqual((round(r["mean_a"], 4), round(r["mean_b"], 4), round(r["diff"], 4)), (0.5, 0.9167, 0.4167))
+        self.assertAlmostEqual(next(t for t in r["tests"] if t["key"] == "signflip")["p"], 0.25)
+        self.assertEqual((nz["a"]["j"], nz["a"]["k"]), (2, 2))
+        self.assertAlmostEqual(nz["a"]["sj"], 0.166667, places=6)
+        self.assertAlmostEqual(nz["b"]["sj"], 0.083333, places=6)
+        self.assertAlmostEqual(nz["a"]["sg"], 0.166667, places=6)
+        self.assertAlmostEqual(nz["b"]["sg"], 0.0)
+        self.assertEqual((nz["a"]["disagree_n"], nz["b"]["disagree_n"], nz["a"]["disagree_cells"]), (2, 1, 6))
+        self.assertAlmostEqual(nz["var_d"], 0.020833, places=6)
+        self.assertAlmostEqual(nz["gen_share"], 4.0)
+        self.assertAlmostEqual(nz["judge_share"], 3.0)
+        self.assertEqual(nz["signal_share"], 0.0)
+        self.assertIn("Estimated noise exceeds the observed variance of differences", nz["warning"])
+        self.assertIn("n = 3", nz["warning"])
+        self.assertEqual({x["id"]: (x["a"], x["b"]) for x in nz["unstable"]},
+                         {"j1": (0.75, 1.0), "j2": (0.25, 0.75), "j3": (0.5, 1.0)})
+        self.assertEqual(len(r["rows"][1]["raw_a"]), 4)
+
+    def test_no_repeats(self):
+        self.assertEqual(self.run_fix("f1_a.csv", "f1_b.csv")["noise"], {"repeated": False})
+        # trial-1 rows of F4 only
+        from evaldiff.server import compare
+        keep = lambda f: "".join(l for l in open(os.path.join(FIX, f)) if '"trial":1' in l)
+        r = compare({"a": {"text": keep("f4_a.jsonl")}, "b": {"text": keep("f4_b.jsonl")}})
+        self.assertEqual(r["noise"], {"repeated": False})
+
+    def test_unbalanced(self):
+        from evaldiff.server import compare
+        a = '{"id":"x","score":0}\n{"id":"x","score":1}\n{"id":"y","score":1}\n{"id":"z","score":0}\n'
+        b = '{"id":"x","score":1}\n{"id":"y","score":1}\n{"id":"z","score":1}\n'
+        nz = compare({"a": {"text": a}, "b": {"text": b}})["noise"]
+        self.assertAlmostEqual(nz["a"]["sg"], 0.5)  # only x has K_i >= 2
+        self.assertAlmostEqual(nz["a"]["gen"], 0.5 * (1 / 2 + 1 + 1) / 3)
+        self.assertIsNone(nz["b"]["sg"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ import math
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import parse, stats
+from . import noise, parse, stats
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(ROOT, "static")
@@ -15,6 +15,7 @@ EXAMPLES = [
     {"value": "f3", "label": "F3 continuous n=8", "files": ["f3_a.jsonl", "f3_b.jsonl"]},
     {"value": "f4", "label": "F4 repeated trials", "files": ["f4_a.jsonl", "f4_b.jsonl"]},
     {"value": "f6", "label": "F6 zeros (Wilcoxon)", "files": ["f6_a.csv", "f6_b.csv"]},
+    {"value": "f7", "label": "F7 trials × judge runs", "files": ["f7_a.jsonl", "f7_b.jsonl"]},
     {"value": "big", "label": "BIG n=2000", "files": ["big_a.jsonl", "big_b.jsonl"]},
 ]
 TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css",
@@ -115,6 +116,7 @@ def compare(payload):
     result["warnings"] = warnings + result["warnings"]
     for row in result["rows"]:
         row["raw_a"], row["raw_b"] = sides[0]["rows"][row["id"]], sides[1]["rows"][row["id"]]
+    result["noise"] = noise.analyze(ids, sides[0]["cells"], sides[1]["cells"], result["var_d"])
     result["mapping"] = {k: {"id": s["id_key"], "score": s["score_key"]} for k, s in zip("ab", sides)}
     result["mapped"] = any(s["mapped"] for s in sides)  # False: auto-detection was enough, the page hides mapping
     return result

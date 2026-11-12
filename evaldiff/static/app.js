@@ -195,6 +195,57 @@ function renderChart(table) {
   }
 }
 
+const v6 = (x) => x.toFixed(6), pct = (x) => x === null ? "n/a" : (x * 100).toFixed(1) + "%";
+const kfmt = (x) => String(+x.toFixed(2));
+const NEEDS_J = "n/a (needs ≥2 judge runs)", NEEDS_K = "n/a (needs ≥2 trials)";
+
+// Noise a side adds to Var(d) when run with K' trials and J' judge runs per trial.
+const sideNoiseAt = (s, k, j) => (s.sg || 0) / k + (s.sj ? s.sj / (k * j) : 0);
+const noiseAt = (nz, k, j) => sideNoiseAt(nz.a, k, j) + sideNoiseAt(nz.b, k, j);
+// What-if K' and J' (blank or invalid: the current design); returns [K', J'].
+function whatif(nz) {
+  const k = num("whatif-k"), j = num("whatif-j");
+  return [k >= 1 ? k : (nz.a.k + nz.b.k) / 2, j >= 1 ? j : (nz.a.j + nz.b.j) / 2];
+}
+
+function updateWhatif() {
+  const nz = last && last.noise;
+  if (!nz || !nz.repeated) return;
+  const [k, j] = whatif(nz);
+  $("whatif-se").textContent = f4(Math.sqrt((Math.max(0, nz.omega2) + noiseAt(nz, k, j)) / last.n));
+}
+
+function renderNoise(r) {
+  const nz = r.noise;
+  $("noise-none").hidden = nz.repeated; $("noise-body").hidden = !nz.repeated;
+  if (!nz.repeated) return;
+  for (const k of ["a", "b"]) {
+    const s = nz[k], nest = s.nested;
+    $("k-" + k).textContent = kfmt(s.k); $("j-" + k).textContent = kfmt(s.j);
+    $("sigma2-" + k).textContent = nest ? "n/a (judge runs present)" : s.sg === null ? NEEDS_K : v6(s.sg);
+    $("sigmaj-" + k).textContent = s.sj === null ? NEEDS_J : v6(s.sj);
+    $("sigmag-" + k).textContent = s.sg === null ? NEEDS_K : nest ? v6(s.sg) : "n/a (no judge runs)";
+    $("judge-disagree-" + k).textContent = s.disagree === null ? NEEDS_J : `${pct(s.disagree)} (${s.disagree_n} of ${s.disagree_cells})`;
+  }
+  const nest = nz.a.nested || nz.b.nested;
+  $("var-d-noise").textContent = v6(nz.var_d);
+  $("noise-share").textContent = nest ? "n/a" : pct(nz.noise_share);
+  $("gen-share").textContent = nest ? pct(nz.gen_share) : "n/a";
+  $("judge-share").textContent = nest ? pct(nz.judge_share) : "n/a";
+  $("signal-share").textContent = pct(nz.signal_share);
+  $("omega2").textContent = v6(nz.omega2);
+  $("noise-warning").hidden = !nz.warning; $("noise-warning").textContent = nz.warning;
+  $("whatif-k").value = kfmt((nz.a.k + nz.b.k) / 2); $("whatif-j").value = kfmt((nz.a.j + nz.b.j) / 2);
+  setRows("unstable-table", nz.unstable, (x) => [x.id, x.a.toFixed(2), x.b.toFixed(2)]);
+  for (const tr of $("unstable-table").querySelectorAll("tbody tr")) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "row-btn"; b.textContent = tr.dataset.id;
+    b.setAttribute("aria-controls", "row-detail");
+    tr.children[0].replaceChildren(b);
+  }
+  updateWhatif();
+}
+
 function clearPower() {
   for (const id of ["mde", "n-required"]) $(id).textContent = "n/a";
   $("n-required-note").textContent = "";
@@ -211,11 +262,14 @@ async function updatePower() {
   const noVar = !(observed > 1e-15);  // all-equal differences can leave float dust in Var(d)
   $("power-variation").hidden = !noVar;
   $("assumed-pd-label").hidden = !binary; $("assumed-sd-label").hidden = binary;
-  $("pd-box").hidden = !binary; $("var-d-box").hidden = binary;
+  const trials = !!(r.noise && r.noise.repeated);
+  $("pd-box").hidden = !binary; $("var-d-box").hidden = binary && !trials;
   $("pd").textContent = binary ? f4(r.pd) : "";
-  $("var-d").textContent = binary ? "" : r.var_d.toFixed(6);
+  $("var-d").textContent = binary && !trials ? "" : r.var_d.toFixed(6);
   $("power-method").textContent = binary ? "Connor (paired binary)" : "Paired normal approximation (Miller 2024)";
   let value = noVar ? 0 : observed;
+  const withTrials = trials && !binary;  // binary power is driven by p_d, which has no trial decomposition
+  if (withTrials) value = Math.max(0, r.noise.omega2) + noiseAt(r.noise, ...whatif(r.noise));
   const assumedId = binary ? "assumed-pd" : "assumed-sd";
   if (noVar && $(assumedId).value.trim() !== "") { const a = num(assumedId); value = binary ? a : a * a; }
   const seq = ++powerSeq;
@@ -224,7 +278,7 @@ async function updatePower() {
   if (seq !== powerSeq) return;
   $("power-error").textContent = p.error || "";
   if (p.error) { clearPower(); return; }
-  $("power-method").textContent = p.method;
+  $("power-method").textContent = p.method + (withTrials ? " with trials" : "");
   $("mde").textContent = p.mde === null ? "n/a" : f4(p.mde);
   $("n-required").textContent = p.n_required === null ? "n/a" : String(p.n_required);
   $("n-required-note").textContent = p.n_required_note || "";
@@ -272,6 +326,7 @@ function render(r) {
   $("mean-a").textContent = f4(r.mean_a);
   $("mean-b").textContent = f4(r.mean_b);
   $("diff").textContent = sgn(r.diff);
+  $("se-paired").textContent = r.var_d === null ? "n/a" : f4(Math.sqrt(r.var_d / r.n));
   $("ci-label").textContent = r.ci_label;
   $("ci-low").textContent = r.ci ? sgn(r.ci[0]) : "n/a";
   $("ci-high").textContent = r.ci ? sgn(r.ci[1]) : "n/a";
@@ -295,6 +350,7 @@ function render(r) {
   $("search-id").value = "";
   $("row-detail").hidden = true;
   renderRows();
+  renderNoise(r);
 }
 
 async function compare() {
@@ -360,6 +416,8 @@ $("map-columns").addEventListener("click", mapColumns);
 for (const b of document.querySelectorAll("[data-filter]")) b.addEventListener("click", () => { ex.filter = b.dataset.filter; renderRows(); });
 $("search-id").addEventListener("input", renderRows);
 $("sort-delta").addEventListener("click", () => { ex.sort = ex.sort === "asc" ? "desc" : "asc"; renderRows(); });
+for (const id of ["whatif-k", "whatif-j"]) $(id).addEventListener("input", () => { updateWhatif(); updatePower(); });
+$("unstable-table").querySelector("tbody").addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id); });
 const rowsBody = $("rows-table").querySelector("tbody");
 rowsBody.addEventListener("click", (e) => { const tr = e.target.closest("tr"); if (tr) showDetail(tr.dataset.id); });
 for (const id of ["target-power", "target-effect", "assumed-pd", "assumed-sd"]) $(id).addEventListener("input", () => { updatePower(); updatePlan(); });
